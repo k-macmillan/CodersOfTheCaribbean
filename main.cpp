@@ -34,18 +34,86 @@ struct Cube
 inline bool operator==(const Cube& lhs, const Cube& rhs){ return lhs.Xo == rhs.Xo && lhs.Yo == rhs.Yo; };
 inline bool operator!=(const Cube& lhs, const Cube& rhs){ return !operator==(lhs,rhs); };
 
-struct Ship
-{
-    Ship() {}
-    Ship(int X, int Y, int ID, int Direction, int Rum, int Speed) : loc(Cube(X,Y)), id(ID), dir(Direction), rum(Rum), speed(Speed) {}
-    Cube loc;
+void InFront(Cube &c, int dir);
 
-    int dir;
+
+
+class Ship
+{
+public:
+    struct ShipVec
+    {
+        ShipVec() {}
+        ShipVec(Cube Location, int Direction, int Speed) : loc(Location), dir(Direction), speed(Speed) {}
+        Cube loc;
+        int dir;
+        int speed;
+    };
+
+    Ship() {}
+    Ship(int X, int Y, int ID, int Direction, int Rum, int Speed) : id(ID), rum(Rum), vec(ShipVec(Cube(X,Y),Direction,Speed)) {}
+    Ship(int ID, int Rum, ShipVec Ship_vector) : id(ID), rum(Rum), vec(Ship_vector) {}
+    ShipVec vec;
+
     int id = -1;
     int mine_avail;      // Last turn a mine was dropped
     int fire_avail;      // Last turn a shot was fired (can only fire every other)
     int rum;
-    int speed;
+
+    vector<ShipVec> PossibleMoves()
+    {
+        vector<ShipVec> ret_val;
+
+        Cube new_loc = vec.loc;
+        int new_starboard_dir = vec.dir == 0 ? 5 : vec.dir - 1;
+        int new_port_dir = vec.dir == 5 ? 0 : vec.dir + 1;
+
+
+        if (vec.speed == 0)
+        {
+            ShipVec starboard(new_loc,new_starboard_dir, 0);
+            ShipVec port(new_loc, new_port_dir, 0);
+
+            InFront(new_loc, vec.dir);
+            ShipVec faster(new_loc, vec.dir, 1);
+
+            ret_val.emplace_back(starboard);
+            ret_val.emplace_back(port);
+            ret_val.emplace_back(faster);
+        }
+        else if (vec.speed == 1)
+        {
+            ShipVec slower(new_loc,vec.dir, 0);
+
+            InFront(new_loc, vec.dir);
+            ShipVec starboard(new_loc,new_starboard_dir, 1);
+            ShipVec port(new_loc, new_port_dir, 1);
+
+            InFront(new_loc, vec.dir);
+            ShipVec faster(new_loc, vec.dir, 2);
+
+            ret_val.emplace_back(slower);
+            ret_val.emplace_back(starboard);
+            ret_val.emplace_back(port);
+            ret_val.emplace_back(faster);            
+        }
+        else
+        {
+            InFront(new_loc, vec.dir);
+            ShipVec slower(new_loc,vec.dir, 1);
+
+            InFront(new_loc, vec.dir);
+            ShipVec starboard(new_loc,new_starboard_dir, 2);
+            ShipVec port(new_loc, new_port_dir, 2);            
+            
+            ret_val.emplace_back(slower);
+            ret_val.emplace_back(starboard);
+            ret_val.emplace_back(port);
+        }
+        return ret_val;
+    }
+private:
+
 };
 vector<Ship> _my_ships;
 vector<Ship> _en_ships;
@@ -90,10 +158,11 @@ vector<Mine> _mines;
 
 
 
+
+
 int main()
 {
     _turn = 0;
-
 
     while (1) {
         vector<Ship> my_ships,en_ships;
@@ -122,10 +191,10 @@ int main()
                         if (_my_ships[j].id == new_ship.id)
                         {
                             found = true;
-                            _my_ships[j].loc = new_ship.loc;
-                            _my_ships[j].dir = new_ship.dir;
-                            _my_ships[j].rum = new_ship.rum;
-                            _my_ships[j].speed = new_ship.speed;
+                            _my_ships[j].vec.loc = new_ship.vec.loc;
+                            _my_ships[j].vec.dir = new_ship.vec.dir;
+                            _my_ships[j].vec.speed = new_ship.vec.speed;
+                            _my_ships[j].rum = new_ship.rum;                            
                         }
                     }
                     if (!found)
@@ -139,10 +208,10 @@ int main()
                         if (_en_ships[j].id == new_ship.id)
                         {
                             found = true;
-                            _en_ships[j].loc = new_ship.loc;
-                            _en_ships[j].dir = new_ship.dir;
-                            _en_ships[j].rum = new_ship.rum;
-                            _en_ships[j].speed = new_ship.speed;
+                            _en_ships[j].vec.loc = new_ship.vec.loc;
+                            _en_ships[j].vec.dir = new_ship.vec.dir;
+                            _en_ships[j].vec.speed = new_ship.vec.speed;
+                            _en_ships[j].rum = new_ship.rum;                            
                         }
                     }
                     if (!found)
@@ -204,3 +273,40 @@ int main()
 
     return 0;
 }
+
+
+
+void InFront(Cube &c, int dir)
+{
+    if (dir == 0)
+    {
+        c.x += 1;
+        c.y -= 1;
+    }
+    else if (dir == 3)
+    {
+        c.x -= 1;
+        c.y += 1;
+    }
+    else if (dir == 1)
+    {
+        c.x += 1;
+        c.z -= 1;
+    }
+    else if (dir == 4)
+    {
+        c.x -= 1;
+        c.z += 1;
+    }
+    else if (dir == 2)
+    {
+        c.y += 1;
+        c.z -= 1;
+    }
+    else
+    {
+        c.y -= 1;
+        c.z += 1;
+    }
+}
+
