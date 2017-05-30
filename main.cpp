@@ -1,3 +1,8 @@
+#pragma GCC optimize("-O3")
+// #pragma GCC optimize("inline")
+// #pragma GCC optimize("omit-frame-pointer")
+// #pragma GCC optimize("unroll-loops")
+
 
 /*
 NOTES:
@@ -16,6 +21,21 @@ using namespace std;
 
 int _turn;
 
+static unsigned int fr_seed;
+inline void fast_srand ( int seed )
+{
+    //Seed the generator
+    fr_seed = seed;
+}
+inline int fastrand ()
+{
+    //fastrand routine returns one integer, similar output value range as C lib.
+    fr_seed = ( 214013 * fr_seed + 2531011 );
+    return ( fr_seed >> 16 ) & 0x7FFF;
+}
+
+enum class Option {STARBOARD, PORT, WAIT, FASTER, SLOWER, FIRE, MINE};
+
 // Basic map unit. Coordinates exist as X,Y but are better suited to X,Y,Z. Most
 // calculations will utilize XYZ.
 struct Cube
@@ -31,12 +51,20 @@ struct Cube
     int Yo = INT_MAX; // odd-r
 };
 
+
 inline bool operator==(const Cube& lhs, const Cube& rhs){ return lhs.Xo == rhs.Xo && lhs.Yo == rhs.Yo; };
 inline bool operator!=(const Cube& lhs, const Cube& rhs){ return !operator==(lhs,rhs); };
 
 void InFront(Cube &c, int dir);
+vector<Cube> _ShotTemplate;
+void BuildShotTemplate();
+vector<Cube> TranslateShotTemplate(Cube bow);
 
-
+struct Action
+{
+    Cube loc;
+    Option option;
+};
 
 class Ship
 {
@@ -115,21 +143,18 @@ public:
 
     vector<Cube> PossibleShots(int sim_turn)
     {
-        // Cannot fire?
+        // Cannot fire, return empty vector
         if (sim_turn == fire_avail)
             return {};
 
-        vector<Cube> ret_val;
-        // Can be optimized:
-        for (unsigned int i = -5 + vec.loc.x; i <= 5 + vec.loc.x; ++i)
-            for (unsigned int j = -5 + vec.loc.y; j <= 5 + vec.loc.y; ++j)
-                for (unsigned int k = -5 + vec.loc.z; k <= 5 + vec.loc.z; ++k)
-                    if (i + j + k == 0)
-                        ret_val.emplace_back(i,j,k);
+        Cube bow = vec.loc;
+        InFront(bow, vec.dir);
+        return TranslateShotTemplate(bow);
     }
 
     Cube PossibleMine(int sim_turn)
     {
+        // Cannot mine, return empty cube
         if (sim_turn - mine_avail > 4)
             return {};
         else
@@ -145,6 +170,7 @@ private:
 };
 vector<Ship> _my_ships;
 vector<Ship> _en_ships;
+
 
 struct Barrel
 {
@@ -181,10 +207,6 @@ struct Mine
     int id = -1;
 };
 vector<Mine> _mines;
-
-
-
-
 
 
 
@@ -302,6 +324,41 @@ int main()
     return 0;
 }
 
+/*  
+    Fills the vector of all hexes within a radius of a point. Generates 331
+    Cubes (shot locations)
+*/
+void BuildShotTemplate()
+{
+    Cube bow(1000,1000,1000);
+    // Can be optimized:
+    for (unsigned int i = -10 + bow.x; i <= 10 + bow.x; ++i)
+        for (unsigned int j = -10 + bow.y; j <= 10 + bow.y; ++j)
+            for (unsigned int k = -10 + bow.z; k <= 10 + bow.z; ++k)
+                if (i + j + k == 0)
+                        _ShotTemplate.emplace_back(i,j,k);
+}
+
+/*
+    Translates each Cube in _ShotTemplate to be based on the new center(new_bow).
+    Only adds Cubes that are in the map boundry.
+*/
+vector<Cube> TranslateShotTemplate(Cube bow)
+{
+    vector<Cube> ret_val;
+    int dx = 1000 - bow.x;
+    int dy = 1000 - bow.y;
+    int dz = 1000 - bow.z;
+    // 331 = _ShotTemplate.size()
+    for (unsigned int i = 0; i < 331; ++i)
+    {
+        Cube cube(_ShotTemplate[i].x - dx, _ShotTemplate[i].y - dy, _ShotTemplate[i].z - dz);
+        if (cube.Xo >= 0 && cube.Xo < 23 && cube.Yo >= 0 && cube.Yo < 21)
+            ret_val.emplace_back(cube);
+    }
+    return ret_val;
+}
+
 
 
 void InFront(Cube &c, int dir)
@@ -337,4 +394,62 @@ void InFront(Cube &c, int dir)
         c.z += 1;
     }
 }
+
+/*
+    shots_size: 0-331   mine: 0 or 1
+    The cutoffs array stores cutoffs. I wanted at least 2 of the 5 actions to be 
+    movement related. Since there are 331 possible shots and only 5 possible moves
+    it is necessary to represent them as a percentage of total. I assume shots 
+    make up 55% of the pool, mines 5%, and movement the remainder. In the event 
+    there are no possible shots (fire last round), or mines, the function handles
+    that elegantly (0 * anything = 0, 0 + anything = anything).
+
+    Returns the amount fast_rand() will be % with.
+*/
+int GetRandomCutoffs(int* cutoffs, int shots_size, int mine)
+{
+
+    float total = shots_size == 0 ? 100.0 : shots_size / .55;
+
+    float mine_tot = mine * total * .05;
+    float remainder = total - shots_size - mine_tot;
+    float moves = remainder / 5;
+    float running_total = shots_size;
+
+    cutoffs[0] = int(running_total);
+    running_total += moves;
+    cutoffs[1] = int(running_total);
+    running_total += moves;
+    cutoffs[2] = int(running_total);
+    running_total += moves;
+    cutoffs[3] = int(running_total);
+    running_total += moves;
+    cutoffs[4] = int(running_total);
+    running_total += moves;
+    cutoffs[5] = int(running_total);
+    running_total += mine_tot;
+    cutoffs[6] = int(running_total);
+    return running_total;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
