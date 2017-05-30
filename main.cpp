@@ -58,40 +58,76 @@ inline bool operator!=(const Cube& lhs, const Cube& rhs){ return !operator==(lhs
 void InFront(Cube &c, int dir);
 vector<Cube> _ShotTemplate;
 void BuildShotTemplate();
-vector<Cube> TranslateShotTemplate(Cube bow);
+int GetRandomCutoffs(int* cutoffs, int shots_size, int mine, int moves);
+
+
+struct ShipVec
+{
+    ShipVec() {}
+    ShipVec(Cube Location, int Direction, int Speed) : loc(Location), dir(Direction), speed(Speed) {}
+    Cube loc;
+    int dir;
+    int speed;
+};
 
 struct Action
 {
-    Cube loc;
-    Option option;
+    Action() {}
+    Action(ShipVec Ship_vector, Option option) : vec(Ship_vector), opt(option) {}
+    Action(ShipVec Ship_vector, Option option, Cube Action_Location) : vec(Ship_vector), opt(option), action_loc(Action_Location) {}
+    Action(Cube Location, int Direction, int Speed, Option option) : vec(ShipVec(Location, Direction, Speed)), opt(option) {}
+    ShipVec vec;
+    Cube action_loc;
+    Option opt;
 };
+
 
 class Ship
 {
 public:
-    struct ShipVec
-    {
-        ShipVec() {}
-        ShipVec(Cube Location, int Direction, int Speed) : loc(Location), dir(Direction), speed(Speed) {}
-        Cube loc;
-        int dir;
-        int speed;
-    };
-
     Ship() {}
     Ship(int X, int Y, int ID, int Direction, int Rum, int Speed) : id(ID), rum(Rum), vec(ShipVec(Cube(X,Y),Direction,Speed)) {}
     Ship(int ID, int Rum, ShipVec Ship_vector) : id(ID), rum(Rum), vec(Ship_vector) {}
     ShipVec vec;
 
     int id = -1;
-    int mine_avail;      // Last turn a mine was dropped
-    int fire_avail;      // Last turn a shot was fired (can only fire every other)
+    int mine_dropped;       // Last turn a mine was dropped
+    int fired_last;         // Last turn a shot was fired (can only fire every other)
     int rum;
+    vector<Action> actions;
+    int cutoffs[7];
 
-    vector<ShipVec> PossibleMoves()
+
+    /*
+        Fills the actions vector with all possible actions. Also fills the cutoffs
+        array and returns the value to mod by to fill actions.
+    */
+    int FillActions(int sim_turn)
     {
-        vector<ShipVec> ret_val;
+        int shots = 0;
+        int mines = 0;
+        if (sim_turn - fired_last > 1)
+            shots = TranslatePossibleShots(vec.loc, vec.dir, vec.speed);
+        if (sim_turn - mine_dropped > 4)
+        {
+            PossibleMine();
+            mines = 1;
+        }
 
+        return GetRandomCutoffs(cutoffs, shots, mines, PossibleMoves());
+    }
+
+    string BestAction()
+    {
+        string output = "WAIT ";
+        // Run simulations
+
+        return output;
+    }
+
+private:
+    int PossibleMoves()
+    {
         Cube new_loc = vec.loc;
         int new_starboard_dir = vec.dir == 0 ? 5 : vec.dir - 1;
         int new_port_dir = vec.dir == 5 ? 0 : vec.dir + 1;
@@ -99,31 +135,37 @@ public:
 
         if (vec.speed == 0)
         {
+            ShipVec wait(new_loc,vec.dir, 0);
             ShipVec starboard(new_loc,new_starboard_dir, 0);
             ShipVec port(new_loc, new_port_dir, 0);
 
             InFront(new_loc, vec.dir);
             ShipVec faster(new_loc, vec.dir, 1);
 
-            ret_val.emplace_back(starboard);
-            ret_val.emplace_back(port);
-            ret_val.emplace_back(faster);
+            actions.emplace_back(wait, Option::WAIT);
+            actions.emplace_back(starboard, Option::STARBOARD);
+            actions.emplace_back(port, Option::PORT);
+            actions.emplace_back(faster, Option::FASTER);
+            return 4;
         }
         else if (vec.speed == 1)
         {
             ShipVec slower(new_loc,vec.dir, 0);
 
             InFront(new_loc, vec.dir);
+            ShipVec wait(new_loc,vec.dir, 1);
             ShipVec starboard(new_loc,new_starboard_dir, 1);
             ShipVec port(new_loc, new_port_dir, 1);
 
             InFront(new_loc, vec.dir);
             ShipVec faster(new_loc, vec.dir, 2);
-
-            ret_val.emplace_back(slower);
-            ret_val.emplace_back(starboard);
-            ret_val.emplace_back(port);
-            ret_val.emplace_back(faster);            
+            
+            actions.emplace_back(wait, Option::WAIT);
+            actions.emplace_back(slower, Option::SLOWER);
+            actions.emplace_back(starboard, Option::STARBOARD);
+            actions.emplace_back(port, Option::PORT);
+            actions.emplace_back(faster, Option::FASTER);            
+            return 5;
         }
         else
         {
@@ -131,42 +173,95 @@ public:
             ShipVec slower(new_loc,vec.dir, 1);
 
             InFront(new_loc, vec.dir);
+            ShipVec wait(new_loc,vec.dir, 2);
             ShipVec starboard(new_loc,new_starboard_dir, 2);
-            ShipVec port(new_loc, new_port_dir, 2);            
-            
-            ret_val.emplace_back(slower);
-            ret_val.emplace_back(starboard);
-            ret_val.emplace_back(port);
+            ShipVec port(new_loc, new_port_dir, 2);   
+
+            actions.emplace_back(wait, Option::WAIT);
+            actions.emplace_back(slower, Option::SLOWER);
+            actions.emplace_back(starboard, Option::STARBOARD);
+            actions.emplace_back(port, Option::PORT);
+            return 4;
+        }
+    }
+
+    /*
+        Translates each Cube in _ShotTemplate to be based on the new bow.
+        Only adds Cubes that are in the map boundry.
+    */
+    int TranslatePossibleShots(Cube center, int dir, int speed)
+    {
+        int ret_val = 0;
+        Cube new_loc = center;
+        if (speed > 0)
+            InFront(new_loc, dir);
+        if (speed > 1)
+            InFront(new_loc, dir);
+
+        // Shoot from bow...so move the center forward one to the bow
+        InFront(center, dir);
+        int dx = 1000 - center.x;
+        int dy = 1000 - center.y;
+        int dz = 1000 - center.z;
+        // 331 = _ShotTemplate.size()
+        for (unsigned int i = 0; i < 331; ++i)
+        {
+            Cube cube(_ShotTemplate[i].x - dx, _ShotTemplate[i].y - dy, _ShotTemplate[i].z - dz);
+            if (cube.Xo >= 0 && cube.Xo < 23 && cube.Yo >= 0 && cube.Yo < 21)
+            {
+                actions.emplace_back(ShipVec(new_loc, dir, speed), Option::FIRE, cube);
+                ++ret_val;
+            }
         }
         return ret_val;
     }
 
-    vector<Cube> PossibleShots(int sim_turn)
+    void PossibleMine()
     {
-        // Cannot fire, return empty vector
-        if (sim_turn == fire_avail)
-            return {};
-
-        Cube bow = vec.loc;
-        InFront(bow, vec.dir);
-        return TranslateShotTemplate(bow);
+        Cube mine_drop = vec.loc;       // ship center
+        int drop_dir = (vec.dir + 3) % 6;
+        InFront(mine_drop, drop_dir);   // stern
+        InFront(mine_drop, drop_dir);   // cell directly behind the ship
+        Cube new_loc = vec.loc;
+        if (vec.speed > 0)
+            InFront(new_loc, vec.dir);
+        if (vec.speed > 1)
+            InFront(new_loc, vec.dir);
+        actions.emplace_back(ShipVec(new_loc, vec.dir, vec.speed), Option::MINE, mine_drop);
     }
 
-    Cube PossibleMine(int sim_turn)
+    /*
+        shots_size: 0-331   mine: 0 or 1
+        The cutoffs array stores cutoffs. I wanted at least 2 of the 5 actions to be 
+        movement related. Since there are 331 possible shots and only 5 possible moves
+        it is necessary to represent them as a percentage of total. I assume shots 
+        make up 55% of the pool, mines 5%, and movement the remainder. In the event 
+        there are no possible shots (fire last round), or mines, the function handles
+        that elegantly (0 * anything = 0, 0 + anything = anything).
+
+        Returns the amount fast_rand() will be % with.
+    */
+    int GetRandomCutoffs(int* cutoffs, int shots_size, int mine, int moves)
     {
-        // Cannot mine, return empty cube
-        if (sim_turn - mine_avail > 4)
-            return {};
-        else
+
+        float total = shots_size == 0 ? 100.0 : shots_size / .55;
+
+        float mine_tot = mine * total * .05;
+        float remainder = total - shots_size - mine_tot;
+        float move_tot = remainder / moves;
+        float running_total = shots_size;
+
+        cutoffs[0] = int(running_total);
+        running_total += mine_tot;
+        cutoffs[1] = int(running_total);
+        for (unsigned int i = 2; i < moves + 2; ++i)
         {
-            Cube mine_drop = vec.loc;       // ship center
-            int drop_dir = (vec.dir + 3) % 6;
-            InFront(mine_drop, drop_dir);   // stern
-            InFront(mine_drop, drop_dir);   // cell directly behind the ship
+            running_total += move_tot;
+            cutoffs[2] = int(running_total);
         }
+        
+        return running_total;
     }
-private:
-
 };
 vector<Ship> _my_ships;
 vector<Ship> _en_ships;
@@ -213,6 +308,7 @@ vector<Mine> _mines;
 int main()
 {
     _turn = 0;
+    BuildShotTemplate();
 
     while (1) {
         vector<Ship> my_ships,en_ships;
@@ -339,25 +435,7 @@ void BuildShotTemplate()
                         _ShotTemplate.emplace_back(i,j,k);
 }
 
-/*
-    Translates each Cube in _ShotTemplate to be based on the new center(new_bow).
-    Only adds Cubes that are in the map boundry.
-*/
-vector<Cube> TranslateShotTemplate(Cube bow)
-{
-    vector<Cube> ret_val;
-    int dx = 1000 - bow.x;
-    int dy = 1000 - bow.y;
-    int dz = 1000 - bow.z;
-    // 331 = _ShotTemplate.size()
-    for (unsigned int i = 0; i < 331; ++i)
-    {
-        Cube cube(_ShotTemplate[i].x - dx, _ShotTemplate[i].y - dy, _ShotTemplate[i].z - dz);
-        if (cube.Xo >= 0 && cube.Xo < 23 && cube.Yo >= 0 && cube.Yo < 21)
-            ret_val.emplace_back(cube);
-    }
-    return ret_val;
-}
+
 
 
 
@@ -395,42 +473,7 @@ void InFront(Cube &c, int dir)
     }
 }
 
-/*
-    shots_size: 0-331   mine: 0 or 1
-    The cutoffs array stores cutoffs. I wanted at least 2 of the 5 actions to be 
-    movement related. Since there are 331 possible shots and only 5 possible moves
-    it is necessary to represent them as a percentage of total. I assume shots 
-    make up 55% of the pool, mines 5%, and movement the remainder. In the event 
-    there are no possible shots (fire last round), or mines, the function handles
-    that elegantly (0 * anything = 0, 0 + anything = anything).
 
-    Returns the amount fast_rand() will be % with.
-*/
-int GetRandomCutoffs(int* cutoffs, int shots_size, int mine)
-{
-
-    float total = shots_size == 0 ? 100.0 : shots_size / .55;
-
-    float mine_tot = mine * total * .05;
-    float remainder = total - shots_size - mine_tot;
-    float moves = remainder / 5;
-    float running_total = shots_size;
-
-    cutoffs[0] = int(running_total);
-    running_total += moves;
-    cutoffs[1] = int(running_total);
-    running_total += moves;
-    cutoffs[2] = int(running_total);
-    running_total += moves;
-    cutoffs[3] = int(running_total);
-    running_total += moves;
-    cutoffs[4] = int(running_total);
-    running_total += moves;
-    cutoffs[5] = int(running_total);
-    running_total += mine_tot;
-    cutoffs[6] = int(running_total);
-    return running_total;
-}
 
 
 
