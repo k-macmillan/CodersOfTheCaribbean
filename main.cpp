@@ -112,6 +112,34 @@ public:
         }
         return ret_val;
     }
+
+    vector<Cube> PossibleShots(int sim_turn)
+    {
+        // Cannot fire?
+        if (sim_turn == fire_avail)
+            return {};
+
+        vector<Cube> ret_val;
+        // Can be optimized:
+        for (unsigned int i = -5 + vec.loc.x; i <= 5 + vec.loc.x; ++i)
+            for (unsigned int j = -5 + vec.loc.y; j <= 5 + vec.loc.y; ++j)
+                for (unsigned int k = -5 + vec.loc.z; k <= 5 + vec.loc.z; ++k)
+                    if (i + j + k == 0)
+                        ret_val.emplace_back(i,j,k);
+    }
+
+    Cube PossibleMine(int sim_turn)
+    {
+        if (sim_turn - mine_avail > 4)
+            return {};
+        else
+        {
+            Cube mine_drop = vec.loc;       // ship center
+            int drop_dir = (vec.dir + 3) % 6;
+            InFront(mine_drop, drop_dir);   // stern
+            InFront(mine_drop, drop_dir);   // cell directly behind the ship
+        }
+    }
 private:
 
 };
