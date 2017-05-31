@@ -118,27 +118,26 @@ public:
     {
         int shots = 0;
         int mines = 0;
-        cerr << "sim: " << sim_turn << "\tfired_last: " << fired_last << endl;
-        if (sim_turn - fired_last > 0)
+        if (sim_turn - fired_last > 1)
         {
             Cube bow = vec.loc;
             InFront(bow, vec.dir);
-            // bool found = false;
+            bool found = false;
 
             
-            // for (unsigned int i = 0; i < _shot_vectors.size(); ++i)
-            // {
-            //     if (_shot_vectors[i].first == bow)
-            //     {
-            //         found = true;
-            //         viable_shots = _shot_vectors[i].second;
-            //         break;
-            //     }
-            // }
-            // if (!found)
+            for (unsigned int i = 0; i < _shot_vectors.size(); ++i)
+            {
+                if (_shot_vectors[i].first == bow)
+                {
+                    found = true;
+                    viable_shots = _shot_vectors[i].second;
+                    break;
+                }
+            }
+            if (!found)
             {
                 viable_shots = TranslatePossibleShots(vec.loc, vec.dir, vec.speed);
-                // _shot_vectors.emplace_back(bow, viable_shots);                
+                _shot_vectors.emplace_back(bow, viable_shots);                
             }
 
             // unordered_map<Cube,vector<Cube> >::const_iterator found = _shot_vectors.find (bow);
@@ -153,7 +152,6 @@ public:
             // }
 
             shots = viable_shots.size();
-            // cerr << "shots: " << shots << endl;
             Cube new_loc = vec.loc;
             if (vec.speed > 0)
                 InFront(new_loc, vec.dir);
@@ -181,12 +179,7 @@ public:
     Action InitialAction()
     {
         int cut = fastrand() % cutoff;
-        // cerr << "fastrand() \% " << cutoff << " : " << cut << endl;
-        // cerr << "actions.size(): " << actions.size() << endl;
         int move = cutoffs[0] + (cutoffs[0] == cutoffs[1] ? 0 : 1);
-        // cerr << "move: " << move << endl;
-        // for (unsigned int i = 0; i < 7; ++i)
-            // cerr << "cutoff[" << i << "]: " << cutoffs[i] << endl;
         if (cut < cutoffs[0])
             return actions[cut];
         else if (cut < cutoffs[1])
@@ -286,9 +279,9 @@ private:
 
         // Shoot from bow...so move the center forward one to the bow
         InFront(center, dir);
-        int dx = 0 - center.x;
-        int dy = 0 - center.y;
-        int dz = 0 - center.z;
+        int dx = -center.x;
+        int dy = -center.y;
+        int dz = -center.z;
         // 331 = _shot_template.size()
         for (unsigned int i = 0; i < 331; ++i)
         {
@@ -296,7 +289,6 @@ private:
             if (cube.Xo >= 0 && cube.Xo < 23 && cube.Yo >= 0 && cube.Yo < 21)
                 ret_val.emplace_back(cube);
         }
-        cerr << "valid shots: " << ret_val.size() << endl;
         return ret_val;
     }
 
@@ -333,7 +325,7 @@ private:
         float remainder = total - shots_size - mine_tot;
         float move_tot = remainder / moves;
         float running_total = shots_size;
-        cerr << "move_tot: " << move_tot << endl;
+
         cutoffs[0] = int(running_total);
         running_total += mine_tot;
         cutoffs[1] = int(running_total);
@@ -380,7 +372,6 @@ public:
             {
                 my_ships[j].FillActions(sim_turn);
                 my_ship_moves.at(j).at(0) = my_ships[j].InitialAction();
-                cerr << "fire at: " << my_ship_moves.at(j).at(0).action_loc.Xo << "," << my_ship_moves.at(j).at(0).action_loc.Yo << endl;
             }
             for (unsigned int j = 0; j < en_ships.size(); ++j)
             {
@@ -466,7 +457,6 @@ int main()
 {
     _turn = 0;
     BuildShotTemplate();
-    // cerr << "st size: " << _shot_template.size() << endl;
     GA genetic_algo;
 
     while (1) {
