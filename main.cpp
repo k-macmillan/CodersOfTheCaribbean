@@ -52,8 +52,8 @@ struct Cube
     Cube (int X, int Y) : x( X - (Y - (Y & 1)) / 2), z(Y), Xo(X), Yo(Y) {y = -x - z;}
     Cube (int X, int Y, int Z) : x(X), y(Y), z(Z), Xo(X + (Z - (Z & 1)) / 2), Yo(Z) {}
     int x = INT_MAX;
-    int y = INT_MAX;
-    int z = INT_MAX;
+    int y = -INT_MAX;
+    int z = 0;
 
     int Xo = INT_MAX; // odd-r
     int Yo = INT_MAX; // odd-r
@@ -102,8 +102,8 @@ public:
     ShipVec vec;
 
     int id = -1;
-    int mine_dropped;       // Last turn a mine was dropped
-    int fired_last;         // Last turn a shot was fired (can only fire every other)
+    int mine_dropped = -10;       // Last turn a mine was dropped
+    int fired_last = -10;         // Last turn a shot was fired (can only fire every other)
     int rum;
     vector<Action> actions;
     int cutoffs[7];
@@ -118,26 +118,27 @@ public:
     {
         int shots = 0;
         int mines = 0;
-        if (sim_turn - fired_last > 1)
+        cerr << "sim: " << sim_turn << "\tfired_last: " << fired_last << endl;
+        if (sim_turn - fired_last > 0)
         {
             Cube bow = vec.loc;
             InFront(bow, vec.dir);
-            bool found = false;
+            // bool found = false;
 
             
-            for (unsigned int i = 0; i < _shot_vectors.size(); ++i)
-            {
-                if (_shot_vectors[i].first == bow)
-                {
-                    found = true;
-                    viable_shots = _shot_vectors[i].second;
-                    break;
-                }
-            }
-            if (!found)
+            // for (unsigned int i = 0; i < _shot_vectors.size(); ++i)
+            // {
+            //     if (_shot_vectors[i].first == bow)
+            //     {
+            //         found = true;
+            //         viable_shots = _shot_vectors[i].second;
+            //         break;
+            //     }
+            // }
+            // if (!found)
             {
                 viable_shots = TranslatePossibleShots(vec.loc, vec.dir, vec.speed);
-                _shot_vectors.emplace_back(bow, viable_shots);                
+                // _shot_vectors.emplace_back(bow, viable_shots);                
             }
 
             // unordered_map<Cube,vector<Cube> >::const_iterator found = _shot_vectors.find (bow);
@@ -152,6 +153,7 @@ public:
             // }
 
             shots = viable_shots.size();
+            // cerr << "shots: " << shots << endl;
             Cube new_loc = vec.loc;
             if (vec.speed > 0)
                 InFront(new_loc, vec.dir);
@@ -179,7 +181,12 @@ public:
     Action InitialAction()
     {
         int cut = fastrand() % cutoff;
-        int move = cutoffs[1] == 0 ? 0 : cutoffs[0] == 0 ? 0 : cutoffs[0] + 1;
+        // cerr << "fastrand() \% " << cutoff << " : " << cut << endl;
+        // cerr << "actions.size(): " << actions.size() << endl;
+        int move = cutoffs[0] + (cutoffs[0] == cutoffs[1] ? 0 : 1);
+        // cerr << "move: " << move << endl;
+        // for (unsigned int i = 0; i < 7; ++i)
+            // cerr << "cutoff[" << i << "]: " << cutoffs[i] << endl;
         if (cut < cutoffs[0])
             return actions[cut];
         else if (cut < cutoffs[1])
@@ -279,9 +286,9 @@ private:
 
         // Shoot from bow...so move the center forward one to the bow
         InFront(center, dir);
-        int dx = 1000 - center.x;
-        int dy = 1000 - center.y;
-        int dz = 1000 - center.z;
+        int dx = 0 - center.x;
+        int dy = 0 - center.y;
+        int dz = 0 - center.z;
         // 331 = _shot_template.size()
         for (unsigned int i = 0; i < 331; ++i)
         {
@@ -289,6 +296,7 @@ private:
             if (cube.Xo >= 0 && cube.Xo < 23 && cube.Yo >= 0 && cube.Yo < 21)
                 ret_val.emplace_back(cube);
         }
+        cerr << "valid shots: " << ret_val.size() << endl;
         return ret_val;
     }
 
@@ -325,14 +333,14 @@ private:
         float remainder = total - shots_size - mine_tot;
         float move_tot = remainder / moves;
         float running_total = shots_size;
-
+        cerr << "move_tot: " << move_tot << endl;
         cutoffs[0] = int(running_total);
         running_total += mine_tot;
         cutoffs[1] = int(running_total);
         for (unsigned int i = 2; i < moves + 2; ++i)
         {
             running_total += move_tot;
-            cutoffs[2] = int(running_total);
+            cutoffs[i] = int(running_total);
         }
 
         return running_total;
@@ -372,7 +380,7 @@ public:
             {
                 my_ships[j].FillActions(sim_turn);
                 my_ship_moves.at(j).at(0) = my_ships[j].InitialAction();
-
+                cerr << "fire at: " << my_ship_moves.at(j).at(0).action_loc.Xo << "," << my_ship_moves.at(j).at(0).action_loc.Yo << endl;
             }
             for (unsigned int j = 0; j < en_ships.size(); ++j)
             {
@@ -458,7 +466,7 @@ int main()
 {
     _turn = 0;
     BuildShotTemplate();
-
+    // cerr << "st size: " << _shot_template.size() << endl;
     GA genetic_algo;
 
     while (1) {
@@ -492,10 +500,12 @@ int main()
                             _my_ships[j].vec.dir = new_ship.vec.dir;
                             _my_ships[j].vec.speed = new_ship.vec.speed;
                             _my_ships[j].rum = new_ship.rum;
+                            my_ships.emplace_back(_my_ships[j]);
                         }
                     }
                     if (!found)
-                        _my_ships.emplace_back(new_ship);
+                        my_ships.emplace_back(new_ship);
+
 
                 }
                 else
@@ -509,10 +519,11 @@ int main()
                             _en_ships[j].vec.dir = new_ship.vec.dir;
                             _en_ships[j].vec.speed = new_ship.vec.speed;
                             _en_ships[j].rum = new_ship.rum;
+                            en_ships.emplace_back(_en_ships[j]);
                         }
                     }
                     if (!found)
-                        _en_ships.emplace_back(new_ship);
+                        en_ships.emplace_back(new_ship);
                 }
             }
             else if (entityType == "BARREL")
@@ -557,12 +568,17 @@ int main()
             }
 
         }
+        swap(my_ships, _my_ships);
+        swap(en_ships, _en_ships);
 
         genetic_algo.FillShips();
         for (int i = 0; i < genetic_algo.my_ships.size(); i++) 
         {
             if (genetic_algo.my_ship_moves[i][0].opt == Option::FIRE)
+            {
                 cout << "FIRE " << genetic_algo.my_ship_moves[i][0].action_loc.Xo << " " << genetic_algo.my_ship_moves[i][0].action_loc.Yo << endl;
+                _my_ships[i].fired_last = _turn;
+            }
             else if (genetic_algo.my_ship_moves[i][0].opt == Option::MINE)
                 cout << "MINE" << endl;
             else if (genetic_algo.my_ship_moves[i][0].opt == Option::PORT)
@@ -575,9 +591,12 @@ int main()
                 cout << "SLOWER" << endl;
             else
                 cout << "WAIT" << endl;
-        }
-    }
 
+            _my_ships[i].actions.clear();
+        }
+        ++_turn;
+    }
+    
 
 
     return 0;
@@ -589,11 +608,9 @@ int main()
 */
 void BuildShotTemplate()
 {
-    Cube bow(1000, 1000, 1000);
-    // Can be optimized:
-    for (unsigned int i = -10 + bow.x; i <= 10 + bow.x; ++i)
-        for (unsigned int j = -10 + bow.y; j <= 10 + bow.y; ++j)
-            for (unsigned int k = -10 + bow.z; k <= 10 + bow.z; ++k)
+    for (int i = -10; i <= 10; ++i)
+        for (int j = -10; j <= 10; ++j)
+            for (int k = -10; k <= 10; ++k)
                 if (i + j + k == 0)
                     _shot_template.emplace_back(i, j, k);
 }
