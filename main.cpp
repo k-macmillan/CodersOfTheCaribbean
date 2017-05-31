@@ -9,6 +9,11 @@ NOTES:
     I'm not sure if storing viable shots is better than recalculating them. Intuition
     is telling me to keep it as is (save each vector of Cubes).
 
+    I recognize that it would be faster to test for movement/shot first so that I may 
+    not even have to calculate all the shot data but I think this will yield more 
+    accurate distribution. Also, the first turn we are permitted more time. I may use
+    the extra time to fill shot vectors.
+
 */
 
 
@@ -18,7 +23,7 @@ NOTES:
 #include <algorithm>
 #include <climits>
 #include <utility> // pair
-#include <unordered_map>
+// #include <unordered_map>
 
 using namespace std;
 
@@ -102,13 +107,14 @@ public:
     int rum;
     vector<Action> actions;
     int cutoffs[7];
+    int cutoff;
     vector<Cube> viable_shots;
 
     /*
         Fills the actions vector with all possible actions. Also fills the cutoffs
         array and returns the value to mod by to fill actions.
     */
-    int FillActions(int sim_turn)
+    void FillActions(int sim_turn)
     {
         int shots = 0;
         int mines = 0;
@@ -160,7 +166,34 @@ public:
             mines = 1;
         }
 
-        return GetRandomCutoffs(cutoffs, shots, mines, PossibleMoves());
+        cutoff = GetRandomCutoffs(cutoffs, shots, mines, PossibleMoves());
+    }
+
+    /*
+        Since cutoffs for moves/mines were modified they must be accounted for. Cutoffs[0] marks
+        all available shots so it should return whichever shot it hit. cutoffs[1] marks mine
+        and since it makes up 5% of the cutoff, must reference action[cutoffs[1]. Moves work
+        the same. They make up some % of "cutoff" and so if the rand returned a value below 
+        the cutoff it must reference the start
+    */
+    Action InitialAction()
+    {
+        int cut = fastrand() % cutoff;
+        int move = cutoffs[1] == 0 ? 0 : cutoffs[0] == 0 ? 0 : cutoffs[0] + 1;
+        if (cut < cutoffs[0])
+            return actions[cut];
+        else if (cut < cutoffs[1])
+            return actions[cutoffs[0]];
+        else if (cut < cutoffs[2])
+            return actions[move];
+        else if (cut < cutoffs[3])
+            return actions[move + 1];
+        else if (cut < cutoffs[4])
+            return actions[move + 2];
+        else if (cut < cutoffs[5])
+            return actions[move + 3];
+        else if (cut < cutoffs[6])
+            return actions[move + 4];
     }
 
     string BestAction()
@@ -315,22 +348,39 @@ class GA
 public:
     GA()
     {
-        my_ships = _my_ships;
-        en_ships = _en_ships;
+
     }
 
     void FillShips()
     {
-        for (unsigned int i = 0; i < 5; ++i)
+        my_ships = _my_ships;
+        en_ships = _en_ships;
+        sim_turn = _turn;
+        for (unsigned int j = 0; j < my_ships.size(); ++j)
+        {
+            vector<Action> ship_actions(5);
+            my_ship_moves.emplace_back(ship_actions);
+        }
+        for (unsigned int j = 0; j < en_ships.size(); ++j)
+        {
+            vector<Action> ship_actions(5);
+            en_ship_moves.emplace_back(ship_actions);
+        }
+        // for (unsigned int i = 0; i < 5; ++i)
         {
             for (unsigned int j = 0; j < my_ships.size(); ++j)
             {
+                my_ships[j].FillActions(sim_turn);
+                my_ship_moves.at(j).at(0) = my_ships[j].InitialAction();
 
             }
             for (unsigned int j = 0; j < en_ships.size(); ++j)
             {
+                en_ships[j].FillActions(sim_turn);
+                en_ship_moves.at(j).at(0) = en_ships[j].InitialAction();
 
             }
+
         }
     }
 
@@ -343,9 +393,11 @@ public:
 
 
 
-
+    int sim_turn;
     vector<Ship> my_ships;
     vector<Ship> en_ships;
+    vector<vector<Action> > my_ship_moves;
+    vector<vector<Action> > en_ship_moves;
     // Generate the random arrangements but save unique generations of shot vectors
 
 
@@ -406,6 +458,8 @@ int main()
 {
     _turn = 0;
     BuildShotTemplate();
+
+    GA genetic_algo;
 
     while (1) {
         vector<Ship> my_ships, en_ships;
@@ -503,12 +557,24 @@ int main()
             }
 
         }
-        for (int i = 0; i < myShipCount; i++) {
 
-            // Write an action using cout. DON'T FORGET THE "<< endl"
-            // To debug: cerr << "Debug messages..." << endl;
-
-            cout << "MOVE 11 10" << endl; // Any valid action, such as "WAIT" or "MOVE x y"
+        genetic_algo.FillShips();
+        for (int i = 0; i < genetic_algo.my_ships.size(); i++) 
+        {
+            if (genetic_algo.my_ship_moves[i][0].opt == Option::FIRE)
+                cout << "FIRE " << genetic_algo.my_ship_moves[i][0].action_loc.Xo << " " << genetic_algo.my_ship_moves[i][0].action_loc.Yo << endl;
+            else if (genetic_algo.my_ship_moves[i][0].opt == Option::MINE)
+                cout << "MINE" << endl;
+            else if (genetic_algo.my_ship_moves[i][0].opt == Option::PORT)
+                cout << "PORT" << endl;
+            else if (genetic_algo.my_ship_moves[i][0].opt == Option::STARBOARD)
+                cout << "STARBOARD" << endl;
+            else if (genetic_algo.my_ship_moves[i][0].opt == Option::FASTER)
+                cout << "FASTER" << endl;
+            else if (genetic_algo.my_ship_moves[i][0].opt == Option::SLOWER)
+                cout << "SLOWER" << endl;
+            else
+                cout << "WAIT" << endl;
         }
     }
 
