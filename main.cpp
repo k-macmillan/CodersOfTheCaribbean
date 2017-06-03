@@ -22,7 +22,8 @@ NOTES:
 #include <vector>   // may optimze out
 #include <algorithm>
 #include <climits>
-#include <utility> // pair
+#include <utility>  // pair
+#include <queue>    // priority queue
 // #include <unordered_map>
 
 using namespace std;
@@ -90,8 +91,11 @@ struct Action
     ShipVec vec;
     Cube action_loc;
     Option opt;
+    float fitness = 0.0;
 };
-
+// inline bool operator> (const Action& lhs, const Action& rhs){ return lhs.fitness > rhs.fitness; };
+inline bool operator< (const Action& lhs, const Action& rhs){ return lhs.fitness < rhs.fitness; };
+bool VecSort(const Action& lhs, const Action& rhs) {return lhs.fitness > rhs.fitness; };
 
 class Ship
 {
@@ -108,6 +112,7 @@ public:
     vector<Action> actions;
     int cutoffs[7];
     int cutoff;
+    int unweighted_actions = 0;
     vector<Cube> viable_shots;
 
     /*
@@ -118,6 +123,7 @@ public:
     {
         int shots = 0;
         int mines = 0;
+
         if (sim_turn - fired_last > 1)
         {
             Cube bow = vec.loc;
@@ -165,12 +171,13 @@ public:
             PossibleMine();
             mines = 1;
         }
-
-        cutoff = GetRandomCutoffs(cutoffs, shots, mines, PossibleMoves());
+        int moves = PossibleMoves();
+        unweighted_actions = shots + mines + moves;
+        cutoff = GetRandomCutoffs(cutoffs, shots, mines, moves);
     }
 
     /*
-        Since cutoffs for moves/mines were modified they must be accounted for. Cutoffs[0] marks
+        Since cutoffs for moves/mines were weighted they must be accounted for. Cutoffs[0] marks
         all available shots so it should return whichever shot it hit. cutoffs[1] marks mine
         and since it makes up 5% of the cutoff, must reference action[cutoffs[1]. Moves work
         the same. They make up some % of "cutoff" and so if the rand returned a value below 
@@ -196,13 +203,6 @@ public:
             return actions[move + 4];
     }
 
-    string BestAction()
-    {
-        string output = "WAIT ";
-        // Run simulations
-
-        return output;
-    }
 
 private:
 
@@ -342,6 +342,13 @@ vector<Ship> _my_ships;
 vector<Ship> _en_ships;
 
 
+// Will evaluate the fitness of an action. It will be += because it will inherit
+// the fitness of the previous move.
+void EvaluateFitness(Action &a)
+{
+    a.fitness += (fast_rand() % 100 + 0.0);
+}
+
 
 class GA
 {
@@ -371,8 +378,50 @@ public:
             for (unsigned int j = 0; j < my_ships.size(); ++j)
             {
                 my_ships[j].FillActions(sim_turn);
-                my_ship_moves.at(j).at(0) = my_ships[j].InitialAction();
-            }
+                vector<Action> sim_ship_turn;
+
+                sim_ship_turn.reserve(my_ships[j].unweighted_actions);                
+                make_heap(sim_ship_turn.begin(), sim_ship_turn.end(), VecSort);
+
+                // Fill turn 1 options
+                for (unsigned int k = 0; k < my_ships[j].unweighted_actions * 2; ++k)
+                {
+                    Action rand_action = my_ships[j].InitialAction();
+                    EvaluateFitness(rand_action);
+                    sim_ship_turn.push_back(rand_action);
+                    push_heap(sim_ship_turn.begin(), sim_ship_turn.end());
+                }
+
+                    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                vector<Action> top_10_percent;
+                top_10_percent.reserve(my_ships[j].unweighted_actions * .1);
+                for (unsigned int i = 0; i < my_ships[j].unweighted_actions * .1; ++i)
+                {
+                    vector<Action> top_1_percent;
+                    make_heap(top_1_percent.begin(), top_1_percent.end(), VecSort);
+                    Action turn_2_action = sim_ship_turn.front();
+                    EvaluateFitness(turn_2_action);
+                    Ship sim_ship(my_ships[j].id, my_ships[j].rum, turn_2_action.vec);
+
+                    for (unsigned int k = 0; k < sim_ship.unweighted_actions * 2; ++k)
+                    {
+                        Action rand_action_sim = sim_ship.InitialAction();
+                        EvaluateFitness(rand_action_sim);
+                        top_1_percent.push_back(rand_action);
+                        push_heap(top_1_percent.begin(), top_1_percent.end());
+                    }
+
+
+
+
+                    pop_heap(sim_ship_turn.begin(), sim_ship_turn.end());
+                    sim_ship_turn.pop_back();
+                }
+
+
+
+
+
             for (unsigned int j = 0; j < en_ships.size(); ++j)
             {
                 en_ships[j].FillActions(sim_turn);
@@ -390,7 +439,7 @@ public:
 
 
 
-
+    vector<Action> sim_my_ships;
 
     int sim_turn;
     vector<Ship> my_ships;
