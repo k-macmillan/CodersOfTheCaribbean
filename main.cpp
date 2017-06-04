@@ -86,9 +86,9 @@ class Action
 {
 public:
     Action() {}
-    Action(ShipVec Ship_vector, Option option) : vec(Ship_vector), opt(option) {}
+    Action(ShipVec Ship_vector, Option option) : vec(Ship_vector), opt(option) {EvaluateFitness();}
     Action(ShipVec Ship_vector, Option option, Cube Action_Location) : vec(Ship_vector), opt(option), action_loc(Action_Location) {EvaluateFitness();}
-    Action(Cube Location, int Direction, int Speed, Option option) : vec(ShipVec(Location, Direction, Speed)), opt(option) {}
+    Action(Cube Location, int Direction, int Speed, Option option) : vec(ShipVec(Location, Direction, Speed)), opt(option) {EvaluateFitness();}
     ShipVec vec;
     Cube action_loc;
     Option opt;
@@ -382,6 +382,7 @@ public:
             for (unsigned int j = 0; j < my_ships.size(); ++j)
             {
                 my_ships[j].FillActions(sim_turn);
+                // my_ship_moves[j][0] = my_ships[j].InitialAction();
                 int base_actions = my_ships[j].unweighted_actions;
                 vector<Action> sim_ship_turn;
 
