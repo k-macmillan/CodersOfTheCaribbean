@@ -9,8 +9,8 @@ NOTES:
     I'm not sure if storing viable shots is better than recalculating them. Intuition
     is telling me to keep it as is (save each vector of Cubes).
 
-    I recognize that it would be faster to test for movement/shot first so that I may 
-    not even have to calculate all the shot data but I think this will yield more 
+    I recognize that it would be faster to test for movement/shot first so that I may
+    not even have to calculate all the shot data but I think this will yield more
     accurate distribution. Also, the first turn we are permitted more time. I may use
     the extra time to fill shot vectors.
 
@@ -86,9 +86,7 @@ class Action
 {
 public:
     Action() {}
-    Action(ShipVec Ship_vector, Option option) : vec(Ship_vector), opt(option) {EvaluateFitness();}
-    Action(ShipVec Ship_vector, Option option, Cube Action_Location) : vec(Ship_vector), opt(option), action_loc(Action_Location) {EvaluateFitness();}
-    Action(Cube Location, int Direction, int Speed, Option option) : vec(ShipVec(Location, Direction, Speed)), opt(option) {EvaluateFitness();}
+    Action(ShipVec Ship_vector, Option option, Cube Action_Location = Cube()) : vec(Ship_vector), opt(option), action_loc(Action_Location) {EvaluateFitness();}
     ShipVec vec;
     Cube action_loc;
     Option opt;
@@ -104,7 +102,7 @@ private:
 
 };
 // inline bool operator> (const Action& lhs, const Action& rhs){ return lhs.fitness > rhs.fitness; };
-inline bool operator< (const Action& lhs, const Action& rhs){ return lhs.fitness < rhs.fitness; };
+inline bool operator< (const Action& lhs, const Action& rhs) { return lhs.fitness < rhs.fitness; };
 bool VecSort(const Action& lhs, const Action& rhs) {return lhs.fitness > rhs.fitness; };
 
 class Ship
@@ -131,6 +129,7 @@ public:
     */
     void FillActions(int sim_turn)
     {
+        actions.clear();
         int shots = 0;
         int mines = 0;
 
@@ -140,7 +139,7 @@ public:
             InFront(bow, vec.dir);
             bool found = false;
 
-            
+
             for (unsigned int i = 0; i < _shot_vectors.size(); ++i)
             {
                 if (_shot_vectors[i].first == bow)
@@ -153,7 +152,7 @@ public:
             if (!found)
             {
                 viable_shots = TranslatePossibleShots(vec.loc, vec.dir, vec.speed);
-                _shot_vectors.emplace_back(bow, viable_shots);                
+                _shot_vectors.emplace_back(bow, viable_shots);
             }
 
             // unordered_map<Cube,vector<Cube> >::const_iterator found = _shot_vectors.find (bow);
@@ -190,7 +189,7 @@ public:
         Since cutoffs for moves/mines were weighted they must be accounted for. Cutoffs[0] marks
         all available shots so it should return whichever shot it hit. cutoffs[1] marks mine
         and since it makes up 5% of the cutoff, must reference action[cutoffs[1]. Moves work
-        the same. They make up some % of "cutoff" and so if the rand returned a value below 
+        the same. They make up some % of "cutoff" and so if the rand returned a value below
         the cutoff it must reference the start
     */
     Action InitialAction()
@@ -386,7 +385,7 @@ public:
                 int base_actions = my_ships[j].unweighted_actions;
                 vector<Action> sim_ship_turn;
 
-                sim_ship_turn.reserve(base_actions);                
+                sim_ship_turn.reserve(base_actions);
                 make_heap(sim_ship_turn.begin(), sim_ship_turn.end(), VecSort);
 
                 // Fill turn 1 options
@@ -396,7 +395,7 @@ public:
                     push_heap(sim_ship_turn.begin(), sim_ship_turn.end());
                 }
 
-                    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                 // vector<Action> top_10_percent;
                 // top_10_percent.reserve(base_actions * .1);
 
@@ -614,7 +613,7 @@ int main()
         swap(en_ships, _en_ships);
 
         genetic_algo.FillShips();
-        for (int i = 0; i < genetic_algo.my_ships.size(); i++) 
+        for (int i = 0; i < genetic_algo.my_ships.size(); i++)
         {
             if (genetic_algo.my_ship_moves[i][0].opt == Option::FIRE)
             {
@@ -638,7 +637,7 @@ int main()
         }
         ++_turn;
     }
-    
+
 
 
     return 0;
