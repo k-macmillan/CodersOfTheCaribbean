@@ -86,7 +86,7 @@ class Action
 {
 public:
     Action() {}
-    Action(ShipVec Ship_vector, Option option, Cube Action_Location = Cube()) : vec(Ship_vector), opt(option), action_loc(Action_Location) {EvaluateFitness();}
+    Action(ShipVec Ship_vector, Option option, Cube Action_Location = Cube(), float Fitness = 0.0) : vec(Ship_vector), opt(option), action_loc(Action_Location), fitness(Fitness) {EvaluateFitness();}
     ShipVec vec;
     Cube action_loc;
     Option opt;
@@ -120,7 +120,6 @@ public:
     vector<Action> actions;
     int cutoffs[7];
     int cutoff;
-    int unweighted_actions = 0;
     vector<Cube> viable_shots;
 
     /*
@@ -181,7 +180,6 @@ public:
             mines = 1;
         }
         int moves = PossibleMoves();
-        unweighted_actions = shots + mines + moves;
         cutoff = GetRandomCutoffs(cutoffs, shots, mines, moves);
     }
 
@@ -382,7 +380,7 @@ public:
             {
                 my_ships[j].FillActions(sim_turn);
                 // my_ship_moves[j][0] = my_ships[j].InitialAction();
-                int base_actions = my_ships[j].unweighted_actions;
+                int base_actions = my_ships[j].actions.size();
                 vector<Action> sim_ship_turn;
 
                 sim_ship_turn.reserve(base_actions);
@@ -407,7 +405,7 @@ public:
                     Action turn_2_action = sim_ship_turn.front();
                     Ship sim_ship(my_ships[j].id, my_ships[j].rum, turn_2_action.vec);
 
-                    for (unsigned int k = 0; k < sim_ship.unweighted_actions * 2; ++k)
+                    for (unsigned int k = 0; k < sim_ship.actions.size() * 2; ++k)
                     {
                         top_1_percent.push_back(sim_ship.InitialAction());
                         push_heap(top_1_percent.begin(), top_1_percent.end());
