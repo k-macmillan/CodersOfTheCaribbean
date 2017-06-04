@@ -82,16 +82,26 @@ struct ShipVec
     int speed;
 };
 
-struct Action
+class Action
 {
+public:
     Action() {}
     Action(ShipVec Ship_vector, Option option) : vec(Ship_vector), opt(option) {}
-    Action(ShipVec Ship_vector, Option option, Cube Action_Location) : vec(Ship_vector), opt(option), action_loc(Action_Location) {}
+    Action(ShipVec Ship_vector, Option option, Cube Action_Location) : vec(Ship_vector), opt(option), action_loc(Action_Location) {EvaluateFitness();}
     Action(Cube Location, int Direction, int Speed, Option option) : vec(ShipVec(Location, Direction, Speed)), opt(option) {}
     ShipVec vec;
     Cube action_loc;
     Option opt;
     float fitness = 0.0;
+
+private:
+    // Will evaluate the fitness of an action. It will be += because it will inherit
+    // the fitness of the previous move.
+    void EvaluateFitness()
+    {
+        fitness += (fastrand() % 100 + 0.0);
+    }
+
 };
 // inline bool operator> (const Action& lhs, const Action& rhs){ return lhs.fitness > rhs.fitness; };
 inline bool operator< (const Action& lhs, const Action& rhs){ return lhs.fitness < rhs.fitness; };
@@ -342,12 +352,6 @@ vector<Ship> _my_ships;
 vector<Ship> _en_ships;
 
 
-// Will evaluate the fitness of an action. It will be += because it will inherit
-// the fitness of the previous move.
-void EvaluateFitness(Action &a)
-{
-    a.fitness += (fast_rand() % 100 + 0.0);
-}
 
 
 class GA
@@ -378,36 +382,34 @@ public:
             for (unsigned int j = 0; j < my_ships.size(); ++j)
             {
                 my_ships[j].FillActions(sim_turn);
+                int base_actions = my_ships[j].unweighted_actions;
                 vector<Action> sim_ship_turn;
 
-                sim_ship_turn.reserve(my_ships[j].unweighted_actions);                
+                sim_ship_turn.reserve(base_actions);                
                 make_heap(sim_ship_turn.begin(), sim_ship_turn.end(), VecSort);
 
                 // Fill turn 1 options
-                for (unsigned int k = 0; k < my_ships[j].unweighted_actions * 2; ++k)
+                for (unsigned int k = 0; k < base_actions * 2; ++k)
                 {
-                    Action rand_action = my_ships[j].InitialAction();
-                    EvaluateFitness(rand_action);
-                    sim_ship_turn.push_back(rand_action);
+                    sim_ship_turn.push_back(my_ships[j].InitialAction());
                     push_heap(sim_ship_turn.begin(), sim_ship_turn.end());
                 }
 
                     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-                vector<Action> top_10_percent;
-                top_10_percent.reserve(my_ships[j].unweighted_actions * .1);
-                for (unsigned int i = 0; i < my_ships[j].unweighted_actions * .1; ++i)
+                // vector<Action> top_10_percent;
+                // top_10_percent.reserve(base_actions * .1);
+
+                // For top 10% of sim_ship_turn
+                for (unsigned int i = 0; i < base_actions * .1; ++i)
                 {
                     vector<Action> top_1_percent;
                     make_heap(top_1_percent.begin(), top_1_percent.end(), VecSort);
                     Action turn_2_action = sim_ship_turn.front();
-                    EvaluateFitness(turn_2_action);
                     Ship sim_ship(my_ships[j].id, my_ships[j].rum, turn_2_action.vec);
 
                     for (unsigned int k = 0; k < sim_ship.unweighted_actions * 2; ++k)
                     {
-                        Action rand_action_sim = sim_ship.InitialAction();
-                        EvaluateFitness(rand_action_sim);
-                        top_1_percent.push_back(rand_action);
+                        top_1_percent.push_back(sim_ship.InitialAction());
                         push_heap(top_1_percent.begin(), top_1_percent.end());
                     }
 
@@ -422,16 +424,16 @@ public:
 
 
 
-            for (unsigned int j = 0; j < en_ships.size(); ++j)
-            {
-                en_ships[j].FillActions(sim_turn);
-                en_ship_moves.at(j).at(0) = en_ships[j].InitialAction();
+                for (unsigned int j = 0; j < en_ships.size(); ++j)
+                {
+                    en_ships[j].FillActions(sim_turn);
+                    en_ship_moves.at(j).at(0) = en_ships[j].InitialAction();
+
+                }
 
             }
-
         }
     }
-
 
 
 
