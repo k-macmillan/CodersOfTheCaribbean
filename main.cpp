@@ -797,7 +797,9 @@ int Quadrant(const Cube &a, const Cube &b)
 
 
 // Finds any barrels that will be hit this turn and returns that cumulative value
-float OnBarrel(const Cube &center, const int &dir)
+// Has to take a custom Barrel vector to represent where barrels are for this specific simulation
+// Probabaly unecessary to pass the vector as this would only change with ship destruction.
+float OnBarrel(const Cube &center, const int &dir, const vector<Barrel> &barrels)
 {
     Cube stern = center;
     InFront(stern,(dir + 3) % 6);
@@ -805,15 +807,16 @@ float OnBarrel(const Cube &center, const int &dir)
     InFront(bow, dir);
     
     float ret_val = 0.0;
-    for (unsigned int i = 0; i < _barrels.size(); ++i)
-        if (_barrels[i].loc == bow || _barrels[i].loc == center || _barrels[i].loc == stern)
-         ret_val += float(_barrels[i].rum);
+    for (unsigned int i = 0; i < barrels.size(); ++i)
+        if (barrels[i].loc == bow || barrels[i].loc == center || barrels[i].loc == stern)
+         ret_val += float(barrels[i].rum);
     return ret_val;
 }
 
 
 // Finds any mines that will be hit this turn and returns that cumulative value
-float OnMine(const Cube &center, const int &dir)
+// Has to take a custom Mine vector to represent where mines are for this specific simulation
+float OnMine(const Cube &center, const int &dir, const vector<Mine> &mines)
 {
     Cube stern = center;
     InFront(stern,(dir + 3) % 6);
@@ -821,21 +824,22 @@ float OnMine(const Cube &center, const int &dir)
     InFront(bow, dir);
 
     float ret_val = 0.0;
-    for (unsigned int i = 0; i < _mines.size(); ++i)
+    for (unsigned int i = 0; i < mines.size(); ++i)
     {
-        if (_mines[i].loc == bow)
-            ret_val += 25.0;
-        else if (_mines[i].loc == center)
-            ret_val += 50.0;
-        else if (_mines[i].loc == stern)
-            ret_val += 25.0; 
+        if (mines[i].loc == bow)
+            ret_val -= 25.0;
+        else if (mines[i].loc == center)
+            ret_val -= 50.0;
+        else if (mines[i].loc == stern)
+            ret_val -= 25.0; 
     }
     return ret_val;
 }
 
 
 // Finds any cannonball that will hit this turn and returns that cumulative value
-float OnCannonball(const Cube &center, const int &dir)
+// Has to take a custom Cannonball vector to represent where cannonballs are for this specific simulation
+float OnCannonball(const Cube &center, const int &dir, vector<Cannonball> &cbs)
 {
     Cube stern = center;
     InFront(stern,(dir + 3) % 6);
@@ -843,22 +847,69 @@ float OnCannonball(const Cube &center, const int &dir)
     InFront(bow, dir);
 
     float ret_val = 0.0;
-    for (unsigned int i = 0; i < _cbs.size(); ++i)
+    for (unsigned int i = 0; i < cbs.size(); ++i)
     {
-        if (_cbs[i].impact == 1)
+        if (cbs[i].impact == 1)
         {
-            if (_cbs[i].loc == bow)
-                ret_val += 25.0;
-            else if (_cbs[i].loc == center)
-                ret_val += 50.0;
-            else if (_cbs[i].loc == stern)
-                ret_val += 25.0;
+            if (cbs[i].loc == bow)
+                ret_val -= 25.0;
+            else if (cbs[i].loc == center)
+                ret_val -= 50.0;
+            else if (cbs[i].loc == stern)
+                ret_val -= 25.0;
         }
     }
     return ret_val;
 }
 
+float OnShip(const Cube &center, const int &dir, const vector<Ship> &my_ships, const vector<Ship> &en_ships)
+{
+    Cube stern = center;
+    InFront(stern,(dir + 3) % 6);
+    Cube bow = center;
+    InFront(bow, dir);
 
+    float ret_val = 0.0;
+    for (unsigned int i = 0; i < my_ships.size(); ++i)
+    {
+        if (my_ships[i].vec.loc != center)
+        {
+            Cube en_center = my_ships[i].vec.loc;
+            Cube en_stern = en_center;
+            InFront(en_stern,(my_ships[i].vec.dir + 3) % 6);
+            Cube en_bow = en_center;
+            InFront(en_bow, dir);
+            // Assumes I'm not trying to box an enemy in
+            if (stern == en_stern || stern == en_center || stern == en_bow)
+                ret_val -= 50.0;
+            if (center == en_stern || center == en_center || center == en_bow)
+                ret_val -= 50.0;
+            if (bow == en_stern || bow == en_center || bow == en_bow)
+                ret_val -= 50.0;
+        }
+    }
+
+    for (unsigned int i = 0; i < en_ships.size(); ++i)
+    {
+        if (en_ships[i].vec.loc != center)
+        {
+            Cube en_center = en_ships[i].vec.loc;
+            Cube en_stern = en_center;
+            InFront(en_stern,(en_ships[i].vec.dir + 3) % 6);
+            Cube en_bow = en_center;
+            InFront(en_bow, dir);
+            // Assumes I'm not trying to ram
+            if (stern == en_stern || stern == en_center || stern == en_bow)
+                ret_val -= 50.0;
+            if (center == en_stern || center == en_center || center == en_bow)
+                ret_val -= 50.0;
+            if (bow == en_stern || bow == en_center || bow == en_bow)
+                ret_val -= 50.0;
+        }
+    }
+
+    return ret_val;
+}
 
 
 
