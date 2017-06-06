@@ -536,7 +536,7 @@ public:
                     my_ships[j].actions.pop_back();
                 }
 
-                my_ship_moves[j][0] = sim_ship_turn.front();
+                my_ship_moves[j][0] = sim_ship_turn.front().prev_actions[0];
 
 
                 // sim_ship_turn now contains the best fitness in heap order for turn 1 and 2
@@ -796,8 +796,67 @@ int Quadrant(const Cube &a, const Cube &b)
 }
 
 
+// Finds any barrels that will be hit this turn and returns that cumulative value
+float OnBarrel(const Cube &center, const int &dir)
+{
+    Cube stern = center;
+    InFront(stern,(dir + 3) % 6);
+    Cube bow = center;
+    InFront(bow, dir);
+    
+    float ret_val = 0.0;
+    for (unsigned int i = 0; i < _barrels.size(); ++i)
+        if (_barrels[i].loc == bow || _barrels[i].loc == center || _barrels[i].loc == stern)
+         ret_val += float(_barrels[i].rum);
+    return ret_val;
+}
 
 
+// Finds any mines that will be hit this turn and returns that cumulative value
+float OnMine(const Cube &center, const int &dir)
+{
+    Cube stern = center;
+    InFront(stern,(dir + 3) % 6);
+    Cube bow = center;
+    InFront(bow, dir);
+
+    float ret_val = 0.0;
+    for (unsigned int i = 0; i < _mines.size(); ++i)
+    {
+        if (_mines[i].loc == bow)
+            ret_val += 25.0;
+        else if (_mines[i].loc == center)
+            ret_val += 50.0;
+        else if (_mines[i].loc == stern)
+            ret_val += 25.0; 
+    }
+    return ret_val;
+}
+
+
+// Finds any cannonball that will hit this turn and returns that cumulative value
+float OnCannonball(const Cube &center, const int &dir)
+{
+    Cube stern = center;
+    InFront(stern,(dir + 3) % 6);
+    Cube bow = center;
+    InFront(bow, dir);
+
+    float ret_val = 0.0;
+    for (unsigned int i = 0; i < _cbs.size(); ++i)
+    {
+        if (_cbs[i].impact == 1)
+        {
+            if (_cbs[i].loc == bow)
+                ret_val += 25.0;
+            else if (_cbs[i].loc == center)
+                ret_val += 50.0;
+            else if (_cbs[i].loc == stern)
+                ret_val += 25.0;
+        }
+    }
+    return ret_val;
+}
 
 
 
