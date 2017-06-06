@@ -98,6 +98,12 @@ struct Cannonball
 };
 vector<Cannonball> _cbs;
 
+void AdvanceCannonBalls(vector<Cannonball> &cbs)
+{
+    for (unsigned int i =0; i < cbs.size(); ++i)
+        --cbs[i].impact;
+}
+
 struct Mine
 {
     Mine() {}
@@ -159,13 +165,19 @@ private:
 inline bool operator< (const Action& lhs, const Action& rhs) { return lhs.fitness < rhs.fitness; };
 bool VecSort(const Action& lhs, const Action& rhs) {return lhs.fitness > rhs.fitness; };
 
+
+float OnBarrel(const Cube &center, const int &dir, const vector<Barrel> &barrels);
+float OnMine(const Cube &center, const int &dir, const vector<Mine> &mines);
+float OnCannonball(const Cube &center, const int &dir, const vector<Cannonball> &cbs);
+float OnEdge(const Cube &center, const int &dir);
+
 class Ship
 {
 public:
     Ship() {}
     Ship(int X, int Y, int ID, int Direction, int Rum, int Speed) : id(ID), rum(Rum), vec(ShipVec(Cube(X, Y), Direction, Speed)) {}
     // Ship(int ID, int Rum, ShipVec Ship_vector) : id(ID), rum(Rum), vec(Ship_vector) {}
-    Ship(const Ship &s, Action Best_Action) : id(s.id), rum(s.rum), mine_dropped(s.mine_dropped), fired_last(s.fired_last), vec(Best_Action.vec), best_action(Best_Action) {}
+    Ship(const Ship &s, Action Best_Action, float Fitness = 0.0) : id(s.id), rum(s.rum), mine_dropped(s.mine_dropped), fired_last(s.fired_last), vec(Best_Action.vec), best_action(Best_Action) {}
     
     ShipVec vec;
     int id = -1;
@@ -176,25 +188,26 @@ public:
     Action best_action;             // Actions carry all previous actions so this would be a map of actions
     int cutoffs[7];
     int cutoff;
-    vector<Cube> viable_shots;
+    
     ShipVec goal;
 
     /*
         Fills the actions vector with all possible actions. Also fills the cutoffs
         array and returns the value to mod by to fill actions.
     */
-    void FillActions(int sim_turn)
+    void FillActions(int sim_turn, const vector<Ship> &my_ships, const vector<Ship> &en_ships, const vector<Mine> &mines, const vector<Cannonball> &cbs, const vector<Barrel> &barrels)
     {
         actions.clear();
         int shots = 0;
-        int mines = 0;
+        int mine_actions = 0;
         make_heap(actions.begin(), actions.end(), VecSort);
 
-        cerr << "sim: " << sim_turn << "\tfired: " << fired_last << endl;
+        // cerr << "sim: " << sim_turn << "\tfired: " << fired_last << endl;
         if (sim_turn - fired_last > 1)
         {
             Cube bow = vec.loc;
             InFront(bow, vec.dir);
+            vector<Cube> viable_shots;
             bool found = false;
 
 
@@ -229,18 +242,18 @@ public:
             float expected_damage = 0.0;
             if (vec.speed == 0)
             {
-                expected_damage += IncomingDamage(ShipVec(new_loc, vec.dir, vec.speed));
+                expected_damage += IncomingDamage(ShipVec(new_loc, vec.dir, vec.speed), mines, cbs, barrels);
             }
             else if (vec.speed == 1)
             {
                 InFront(new_loc, vec.dir);
-                expected_damage += IncomingDamage(ShipVec(new_loc, vec.dir, vec.speed));
+                expected_damage += IncomingDamage(ShipVec(new_loc, vec.dir, vec.speed), mines, cbs, barrels);
             }
             else if (vec.speed == 2)
             {
                 InFront(new_loc, vec.dir);                
                 InFront(new_loc, vec.dir);
-                expected_damage += IncomingDamage(ShipVec(new_loc, vec.dir, vec.speed));
+                expected_damage += IncomingDamage(ShipVec(new_loc, vec.dir, vec.speed), mines, cbs, barrels);
 
             }
 
@@ -256,11 +269,11 @@ public:
         if (sim_turn - mine_dropped > 4)
         {
             PossibleMine();
-            mines = 1;
+            mine_actions = 1;
         }
         int moves = PossibleMoves();
-        cutoff = GetRandomCutoffs(cutoffs, shots, mines, moves);
-        cerr << "action size: " << actions.size() << endl;
+        cutoff = GetRandomCutoffs(cutoffs, shots, mine_actions, moves);
+        // cerr << "action size: " << actions.size() << endl;
     }
 
     /*
@@ -290,10 +303,15 @@ public:
             return actions[move + 4];
     }
 
-    float IncomingDamage(const ShipVec &s)
+    float IncomingDamage(const ShipVec &s, const vector<Mine> &mines, const vector<Cannonball> &cbs, const vector<Barrel> &barrels)
     {
         float ret_val = 0.0;
         // vector<int> impact_ids;
+        ret_val += OnEdge(s.loc, s.dir);
+        ret_val += OnMine(s.loc, s.dir, mines);
+        ret_val += OnCannonball(s.loc, s.dir, cbs);
+        ret_val += OnBarrel(s.loc, s.dir, barrels);
+
 
         Cube stern = s.loc;
         InFront(stern,(s.dir + 3) % 6);
@@ -481,6 +499,8 @@ vector<Ship> _my_ships;
 vector<Ship> _en_ships;
 
 
+float OnShip(const Cube &center, const int &dir, const vector<Ship> &my_ships, const vector<Ship> &en_ships);
+
 
 
 class FitnessEvolution
@@ -495,6 +515,9 @@ public:
     {
         my_ships = _my_ships;
         en_ships = _en_ships;
+        barrels = _barrels;
+        cbs = _cbs;
+        mines = _mines;
         sim_turn = _turn;
         for (unsigned int j = 0; j < my_ships.size(); ++j)
         {
@@ -510,19 +533,21 @@ public:
         {
             for (unsigned int j = 0; j < my_ships.size(); ++j)
             {
-                my_ships[j].FillActions(sim_turn);
+                vector<Cannonball> cbs_my_ship = cbs;
+                my_ships[j].FillActions(sim_turn, my_ships, en_ships, mines, cbs_my_ship, barrels);
                 // my_ship_moves[j][0] = my_ships[j].InitialAction();
                 vector<Action> sim_ship_turn;
                 make_heap(sim_ship_turn.begin(), sim_ship_turn.end());
 
+                AdvanceCannonBalls(cbs_my_ship);
                 // Take top 10% of this ship's actions
-                cerr << "ship action size: " << my_ships[j].actions.size() << endl;
+                // cerr << "ship action size: " << my_ships[j].actions.size() << endl;
                 for (unsigned int i = 0; i < my_ships[j].actions.size() * .1 + 1; ++i)
                 {
                     Ship sim_ship(my_ships[j], my_ships[j].actions.front());
 
                     // Build all possible actions and rank them by fitness
-                    sim_ship.FillActions(sim_turn + 1);
+                    sim_ship.FillActions(sim_turn + 1, my_ships, en_ships, mines, cbs_my_ship, barrels);
 
                     // Take only top 1% (+1) and add them to sim_ship_turn's actions
                     for (unsigned int k = 0; k < sim_ship.actions.size() * .01 + 1; ++k)
@@ -564,6 +589,11 @@ public:
     int sim_turn;
     vector<Ship> my_ships;
     vector<Ship> en_ships;
+    
+    vector<Barrel> barrels;
+    vector<Cannonball> cbs;
+    vector<Mine> mines;
+
     vector<vector<Action> > my_ship_moves;
     vector<vector<Action> > en_ship_moves;
     // Generate the random arrangements but save unique generations of shot vectors
@@ -695,6 +725,7 @@ int main()
         genetic_algo.FillShips();
         for (int i = 0; i < genetic_algo.my_ships.size(); i++)
         {
+            cerr << "fitness: " << genetic_algo.my_ship_moves[i][0].fitness << endl;
             if (genetic_algo.my_ship_moves[i][0].opt == Option::FIRE)
             {
                 cout << "FIRE " << genetic_algo.my_ship_moves[i][0].action_loc.Xo << " " << genetic_algo.my_ship_moves[i][0].action_loc.Yo << endl;
@@ -839,7 +870,7 @@ float OnMine(const Cube &center, const int &dir, const vector<Mine> &mines)
 
 // Finds any cannonball that will hit this turn and returns that cumulative value
 // Has to take a custom Cannonball vector to represent where cannonballs are for this specific simulation
-float OnCannonball(const Cube &center, const int &dir, vector<Cannonball> &cbs)
+float OnCannonball(const Cube &center, const int &dir, const vector<Cannonball> &cbs)
 {
     Cube stern = center;
     InFront(stern,(dir + 3) % 6);
