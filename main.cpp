@@ -911,7 +911,24 @@ float OnShip(const Cube &center, const int &dir, const vector<Ship> &my_ships, c
     return ret_val;
 }
 
+// I consider edges to be relatively unsafe since it limits your movement options
+// Collisions with the edge put you at a stop and could incur a 50 rum hit
+float OnEdge(const Cube &center, const int &dir)
+{
+    Cube bow = center;
+    InFront(bow, dir);
 
+    float ret_val = 0.0;
+    if (bow.Xo < 0 || bow.Xo > 22 || bow.Yo < 0 || bow.Yo > 20)
+        ret_val -= 10;
+    if (center.Xo == 0 || center.Xo == 22 || center.Yo == 0 || center.Yo == 20)
+        ret_val -= 5;
+    // Collision with edge
+    if (center.Xo < 0 || center.Xo > 22 || center.Yo < 0 || center.Yo > 20)
+        ret_val -= 50;
+
+    return ret_val;
+}
 
 
 
