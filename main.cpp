@@ -154,9 +154,9 @@ private:
     // the fitness of the previous move.
     void EvaluateFitness()
     {
-        Cube movement = vec.loc;
+        // Cube movement = vec.loc;
 
-        fitness += (fastrand() % 100 + 0.0);
+        // fitness += (fastrand() % 100 + 0.0);
     }
 
 
@@ -242,18 +242,19 @@ public:
             float expected_damage = 0.0;
             if (vec.speed == 0)
             {
-                expected_damage += IncomingDamage(ShipVec(new_loc, vec.dir, vec.speed), mines, cbs, barrels);
+                expected_damage += FitnessModification(ShipVec(new_loc, vec.dir, vec.speed), mines, cbs, barrels);
             }
             else if (vec.speed == 1)
             {
                 InFront(new_loc, vec.dir);
-                expected_damage += IncomingDamage(ShipVec(new_loc, vec.dir, vec.speed), mines, cbs, barrels);
+                expected_damage += FitnessModification(ShipVec(new_loc, vec.dir, vec.speed), mines, cbs, barrels);
             }
             else if (vec.speed == 2)
             {
+                // Does not properly account for mines at the moment...not entirely sure how I want to deal with it.
                 InFront(new_loc, vec.dir);                
                 InFront(new_loc, vec.dir);
-                expected_damage += IncomingDamage(ShipVec(new_loc, vec.dir, vec.speed), mines, cbs, barrels);
+                expected_damage += FitnessModification(ShipVec(new_loc, vec.dir, vec.speed), mines, cbs, barrels);
 
             }
 
@@ -303,7 +304,7 @@ public:
             return actions[move + 4];
     }
 
-    float IncomingDamage(const ShipVec &s, const vector<Mine> &mines, const vector<Cannonball> &cbs, const vector<Barrel> &barrels)
+    float FitnessModification(const ShipVec &s, const vector<Mine> &mines, const vector<Cannonball> &cbs, const vector<Barrel> &barrels)
     {
         float ret_val = 0.0;
         // vector<int> impact_ids;
@@ -312,34 +313,6 @@ public:
         ret_val += OnCannonball(s.loc, s.dir, cbs);
         ret_val += OnBarrel(s.loc, s.dir, barrels);
 
-
-        Cube stern = s.loc;
-        InFront(stern,(s.dir + 3) % 6);
-        Cube bow = s.loc;
-        InFront(bow, s.dir);
-
-        for (unsigned int i = 0; i < _mines.size(); ++i)
-        {
-            if (_mines[i].loc == stern || _mines[i].loc == bow)
-            {
-                ret_val += -25.0;
-                // impact_ids.emplace_back(_mines[i].id);
-            }
-        }
-
-        for (unsigned int i = 0; i < _cbs.size(); ++i)
-        {
-            if (_cbs[i].impact == 1 && (_cbs[i].loc == stern || _cbs[i].loc == bow) )
-            {
-                ret_val += -25.0;
-                // impact_ids.emplace_back(_cbs[i].id);
-            }
-            else if (_cbs[i].impact == 1 && _cbs[i].loc == s.loc)
-            {
-                ret_val += -50.0;
-                // impact_ids.emplace_back(_cbs[i].id);
-            }
-        }
 
         return ret_val;
     }
@@ -452,6 +425,13 @@ private:
         int drop_dir = (vec.dir + 3) % 6;
         InFront(mine_drop, drop_dir);   // stern
         InFront(mine_drop, drop_dir);   // cell directly behind the ship
+        cerr << "center: " << vec.loc.Xo << "," << vec.loc.Yo << endl;
+        cerr << "mine.loc: " << mine_drop.Xo << "," << mine_drop.Yo << endl;
+        // If there is already a mine there do not place one.
+        for (unsigned int i = 0; i < _mines.size(); ++i)
+            if (_mines[i].loc == mine_drop)
+                return;
+
         Cube new_loc = vec.loc;
         if (vec.speed > 0)
             InFront(new_loc, vec.dir);
@@ -732,7 +712,10 @@ int main()
                 _my_ships[i].fired_last = _turn;
             }
             else if (genetic_algo.my_ship_moves[i][0].opt == Option::MINE)
+            {
                 cout << "MINE" << endl;
+                _my_ships[i].mine_dropped = _turn;
+            }
             else if (genetic_algo.my_ship_moves[i][0].opt == Option::PORT)
                 cout << "PORT" << endl;
             else if (genetic_algo.my_ship_moves[i][0].opt == Option::STARBOARD)
@@ -803,6 +786,8 @@ void InFront(Cube &c, int dir)
         c.y -= 1;
         c.z += 1;
     }
+    c.Xo = c.x + (c.z - (c.z & 1)) / 2;
+    c.Yo = c.z;
 }
 
 int Quadrant(const Cube &a, const Cube &b)
