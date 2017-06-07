@@ -269,10 +269,10 @@ public:
         }
         if (sim_turn - mine_dropped > 4)
         {
-            PossibleMine();
+            PossibleMine(mines, cbs, barrels);
             mine_actions = 1;
         }
-        int moves = PossibleMoves();
+        int moves = PossibleMoves(mines, cbs, barrels);
         cutoff = GetRandomCutoffs(cutoffs, shots, mine_actions, moves);
         // cerr << "action size: " << actions.size() << endl;
     }
@@ -324,7 +324,7 @@ private:
         Updates actions vector with the possible moves. Returns an integer
         representing the number of moves.
     */
-    int PossibleMoves()
+    int PossibleMoves(const vector<Mine> &mines, const vector<Cannonball> &cbs, const vector<Barrel> &barrels)
     {
         Cube new_loc = vec.loc;
         int new_starboard_dir = vec.dir == 0 ? 5 : vec.dir - 1;
@@ -341,12 +341,16 @@ private:
             ShipVec faster(new_loc, vec.dir, 1);
 
             actions.emplace_back(wait, Option::WAIT, best_action);
+            actions.back().fitness += FitnessModification(wait, mines, cbs, barrels);
             push_heap(actions.begin(), actions.end());
             actions.emplace_back(starboard, Option::STARBOARD, best_action);
+            actions.back().fitness += FitnessModification(starboard, mines, cbs, barrels);
             push_heap(actions.begin(), actions.end());
             actions.emplace_back(port, Option::PORT, best_action);
+            actions.back().fitness += FitnessModification(port, mines, cbs, barrels);
             push_heap(actions.begin(), actions.end());
             actions.emplace_back(faster, Option::FASTER, best_action);
+            actions.back().fitness += FitnessModification(faster, mines, cbs, barrels);
             push_heap(actions.begin(), actions.end());
             return 4;
         }
@@ -363,14 +367,19 @@ private:
             ShipVec faster(new_loc, vec.dir, 2);
 
             actions.emplace_back(wait, Option::WAIT, best_action);
+            actions.back().fitness += FitnessModification(wait, mines, cbs, barrels);
             push_heap(actions.begin(), actions.end());
             actions.emplace_back(slower, Option::SLOWER, best_action);
+            actions.back().fitness += FitnessModification(slower, mines, cbs, barrels);
             push_heap(actions.begin(), actions.end());
             actions.emplace_back(starboard, Option::STARBOARD, best_action);
+            actions.back().fitness += FitnessModification(starboard, mines, cbs, barrels);
             push_heap(actions.begin(), actions.end());
             actions.emplace_back(port, Option::PORT, best_action);
+            actions.back().fitness += FitnessModification(port, mines, cbs, barrels);
             push_heap(actions.begin(), actions.end());
             actions.emplace_back(faster, Option::FASTER, best_action);
+            actions.back().fitness += FitnessModification(faster, mines, cbs, barrels);
             push_heap(actions.begin(), actions.end());
             return 5;
         }
@@ -385,12 +394,16 @@ private:
             ShipVec port(new_loc, new_port_dir, 2);
 
             actions.emplace_back(wait, Option::WAIT, best_action);
+            actions.back().fitness += FitnessModification(wait, mines, cbs, barrels);
             push_heap(actions.begin(), actions.end());
             actions.emplace_back(slower, Option::SLOWER, best_action);
+            actions.back().fitness += FitnessModification(slower, mines, cbs, barrels);
             push_heap(actions.begin(), actions.end());
             actions.emplace_back(starboard, Option::STARBOARD, best_action);
+            actions.back().fitness += FitnessModification(starboard, mines, cbs, barrels);
             push_heap(actions.begin(), actions.end());
             actions.emplace_back(port, Option::PORT, best_action);
+            actions.back().fitness += FitnessModification(port, mines, cbs, barrels);
             push_heap(actions.begin(), actions.end());
             return 4;
         }
@@ -419,14 +432,14 @@ private:
         return ret_val;
     }
 
-    void PossibleMine()
+    void PossibleMine(const vector<Mine> &mines, const vector<Cannonball> &cbs, const vector<Barrel> &barrels)
     {
         Cube mine_drop = vec.loc;       // ship center
         int drop_dir = (vec.dir + 3) % 6;
         InFront(mine_drop, drop_dir);   // stern
         InFront(mine_drop, drop_dir);   // cell directly behind the ship
-        cerr << "center: " << vec.loc.Xo << "," << vec.loc.Yo << endl;
-        cerr << "mine.loc: " << mine_drop.Xo << "," << mine_drop.Yo << endl;
+        // cerr << "center: " << vec.loc.Xo << "," << vec.loc.Yo << endl;
+        // cerr << "mine.loc: " << mine_drop.Xo << "," << mine_drop.Yo << endl;
         // If there is already a mine there do not place one.
         for (unsigned int i = 0; i < _mines.size(); ++i)
             if (_mines[i].loc == mine_drop)
@@ -437,7 +450,9 @@ private:
             InFront(new_loc, vec.dir);
         if (vec.speed > 1)
             InFront(new_loc, vec.dir);
-        actions.emplace_back(ShipVec(new_loc, vec.dir, vec.speed), Option::MINE, best_action, mine_drop);
+        Action mine_action(ShipVec(new_loc, vec.dir, vec.speed), Option::MINE, best_action, mine_drop);
+        mine_action.fitness += FitnessModification(mine_action.vec, mines, cbs, barrels);
+        actions.push_back(mine_action);
         push_heap(actions.begin(), actions.end());
     }
 
