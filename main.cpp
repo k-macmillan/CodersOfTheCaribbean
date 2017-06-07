@@ -333,24 +333,31 @@ private:
 
         if (vec.speed == 0)
         {
-            ShipVec wait(new_loc, vec.dir, 0);
-            ShipVec starboard(new_loc, new_starboard_dir, 0);
-            ShipVec port(new_loc, new_port_dir, 0);
+            ShipVec wait_vec(new_loc, vec.dir, 0);
+            ShipVec starboard_vec(new_loc, new_starboard_dir, 0);
+            ShipVec port_vec(new_loc, new_port_dir, 0);
 
             InFront(new_loc, vec.dir);
-            ShipVec faster(new_loc, vec.dir, 1);
+            ShipVec faster_vec(new_loc, vec.dir, 1);
 
-            actions.emplace_back(wait, Option::WAIT, best_action);
-            actions.back().fitness += FitnessModification(wait, mines, cbs, barrels);
+            Action wait(wait_vec, Option::WAIT, best_action);
+            wait.fitness += FitnessModification(wait_vec, mines, cbs, barrels);
+            actions.push_back(wait);
             push_heap(actions.begin(), actions.end());
-            actions.emplace_back(starboard, Option::STARBOARD, best_action);
-            actions.back().fitness += FitnessModification(starboard, mines, cbs, barrels);
+
+            Action starboard(starboard_vec, Option::STARBOARD, best_action);            
+            starboard.fitness += FitnessModification(starboard_vec, mines, cbs, barrels);
+            actions.push_back(starboard);
             push_heap(actions.begin(), actions.end());
-            actions.emplace_back(port, Option::PORT, best_action);
-            actions.back().fitness += FitnessModification(port, mines, cbs, barrels);
+
+            Action port(port_vec, Option::PORT, best_action);            
+            port.fitness += FitnessModification(port_vec, mines, cbs, barrels);
+            actions.push_back(port);
             push_heap(actions.begin(), actions.end());
-            actions.emplace_back(faster, Option::FASTER, best_action);
-            actions.back().fitness += FitnessModification(faster, mines, cbs, barrels);
+
+            Action faster(faster_vec, Option::FASTER, best_action);            
+            faster.fitness += FitnessModification(faster_vec, mines, cbs, barrels);
+            actions.push_back(faster);
             push_heap(actions.begin(), actions.end());
             return 4;
         }
@@ -880,7 +887,7 @@ float OnCannonball(const Cube &center, const int &dir, const vector<Cannonball> 
     float ret_val = 0.0;
     for (unsigned int i = 0; i < cbs.size(); ++i)
     {
-        if (cbs[i].impact == 1)
+        if (cbs[i].impact < 3)
         {
             if (cbs[i].loc == bow)
                 ret_val -= 25.0;
