@@ -167,8 +167,8 @@ bool VecSort(const Action& lhs, const Action& rhs) {return lhs.fitness > rhs.fit
 
 
 float OnBarrel(const Cube &center, const int &dir, const vector<Barrel> &barrels);
-float OnMine(const Cube &center, const int &dir, const vector<Mine> &mines);
-float OnCannonball(const Cube &center, const int &dir, const vector<Cannonball> &cbs);
+float OnMine(const ShipVec &s, const vector<Mine> &mines);
+float OnCannonball(const ShipVec &s, const vector<Cannonball> &cbs);
 float OnEdge(const Cube &center, const int &dir);
 
 class Ship
@@ -308,9 +308,12 @@ public:
     {
         float ret_val = 0.0;
         // vector<int> impact_ids;
+        // zero speed is very vulnerable
+        if (s.speed == 0)
+            ret_val -= 10.0;
         ret_val += OnEdge(s.loc, s.dir);
-        ret_val += OnMine(s.loc, s.dir, mines);
-        ret_val += OnCannonball(s.loc, s.dir, cbs);
+        ret_val += OnMine(s, mines);
+        ret_val += OnCannonball(s, cbs);
         ret_val += OnBarrel(s.loc, s.dir, barrels);
 
 
@@ -854,22 +857,32 @@ float OnBarrel(const Cube &center, const int &dir, const vector<Barrel> &barrels
 
 // Finds any mines that will be hit this turn and returns that cumulative value
 // Has to take a custom Mine vector to represent where mines are for this specific simulation
-float OnMine(const Cube &center, const int &dir, const vector<Mine> &mines)
+float OnMine(const ShipVec &s, const vector<Mine> &mines)
 {
-    Cube stern = center;
-    InFront(stern,(dir + 3) % 6);
-    Cube bow = center;
-    InFront(bow, dir);
+    Cube stern = s.loc;
+    InFront(stern,(s.dir + 3) % 6);
+    Cube bow = s.loc;
+    InFront(bow, s.dir);
 
     float ret_val = 0.0;
     for (unsigned int i = 0; i < mines.size(); ++i)
     {
         if (mines[i].loc == bow)
             ret_val -= 25.0;
-        else if (mines[i].loc == center)
-            ret_val -= 50.0;
+        else if (mines[i].loc == s.loc)
+            ret_val -= 25.0;
         else if (mines[i].loc == stern)
             ret_val -= 25.0; 
+
+        // Deal with mines in front
+        if (s.speed == 1)
+            InFront(bow, s.dir);
+        if (mines[i].loc == bow)
+            ret_val -= 25;
+        if (s.speed == 2)
+            InFront(bow, s.dir);
+        if (mines[i].loc == bow)
+            ret_val -= 25;
     }
     return ret_val;
 }
@@ -877,21 +890,30 @@ float OnMine(const Cube &center, const int &dir, const vector<Mine> &mines)
 
 // Finds any cannonball that will hit this turn and returns that cumulative value
 // Has to take a custom Cannonball vector to represent where cannonballs are for this specific simulation
-float OnCannonball(const Cube &center, const int &dir, const vector<Cannonball> &cbs)
+float OnCannonball(const ShipVec &s, const vector<Cannonball> &cbs)
 {
-    Cube stern = center;
-    InFront(stern,(dir + 3) % 6);
-    Cube bow = center;
-    InFront(bow, dir);
+    Cube stern = s.loc;
+    InFront(stern,(s.dir + 3) % 6);
+    Cube bow = s.loc;
+    InFront(bow, s.dir);
 
     float ret_val = 0.0;
     for (unsigned int i = 0; i < cbs.size(); ++i)
     {
-        if (cbs[i].impact < 3)
+        if (s.speed == 0 && cbs[i].impact < 4)
         {
             if (cbs[i].loc == bow)
                 ret_val -= 25.0;
-            else if (cbs[i].loc == center)
+            else if (cbs[i].loc == s.loc)
+                ret_val -= 50.0;
+            else if (cbs[i].loc == stern)
+                ret_val -= 25.0;
+        }
+        else if (s.speed > 0 && cbs[i].impact == 1)
+        {
+            if (cbs[i].loc == bow)
+                ret_val -= 25.0;
+            else if (cbs[i].loc == s.loc)
                 ret_val -= 50.0;
             else if (cbs[i].loc == stern)
                 ret_val -= 25.0;
