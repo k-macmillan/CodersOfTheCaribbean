@@ -14,6 +14,15 @@ NOTES:
     accurate `ribution. Also, the first turn we are permitted more time. I may use
     the extra time to fill shot vectors.
 
+    Shot options will be reworked. Currently I get all available shots and use random to 
+    determine which one will be scored. The way I'm setting up the simulations doesn't need
+    this. Shots will be scored based on a shot template (which is based on boat speed), 
+    nearby vessels, mines, and incoming shots.
+
+    ALSO, enemy vessels need to be ran before my ships, so we can predict where/what they
+    are likely to do. I may keep a global variable or two that will classify the player based 
+    on if they are behaving as my model expects.
+
 */
 
 
@@ -64,6 +73,7 @@ struct Cube
 inline bool operator==(const Cube& lhs, const Cube& rhs) { return lhs.Xo == rhs.Xo && lhs.Yo == rhs.Yo; };
 inline bool operator!=(const Cube& lhs, const Cube& rhs) { return !operator==(lhs, rhs); };
 
+float ManhattanDist(const Cube &origin, const Cube &dest);
 void InFront(Cube &c, int dir);
 vector<Cube> _shot_template;
 vector<Cube> _target_template;
@@ -1077,7 +1087,10 @@ float OnEdge(const Cube &center, const int &dir)
     return ret_val;
 }
 
-
+float ManhattanDist(const Cube &origin, const Cube &dest)
+{
+    return (abs(origin.x-dest.x) + abs(origin.y-dest.y) + abs(origin.z-dest.z)) / 2.0;
+}
 
 
 
