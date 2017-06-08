@@ -66,6 +66,7 @@ inline bool operator!=(const Cube& lhs, const Cube& rhs) { return !operator==(lh
 
 void InFront(Cube &c, int dir);
 vector<Cube> _shot_template;
+vector<Cube> _target_template;
 // unordered_map<Cube, vector<Cube> > _shot_vectors;
 // _shot_vectors.reserve(400);
 vector<pair<Cube, vector<Cube> > > _shot_vectors;
@@ -168,6 +169,7 @@ bool VecSort(const Action& lhs, const Action& rhs) {return lhs.fitness > rhs.fit
 
 float OnBarrel(const Cube &center, const int &dir, const vector<Barrel> &barrels);
 float OnMine(const ShipVec &s, const vector<Mine> &mines);
+float MineInFront(const ShipVec &s, const vector<Mine> &mines);
 float OnCannonball(const ShipVec &s, const vector<Cannonball> &cbs);
 float OnEdge(const Cube &center, const int &dir);
 
@@ -177,7 +179,8 @@ public:
     Ship() {}
     Ship(int X, int Y, int ID, int Direction, int Rum, int Speed) : id(ID), rum(Rum), vec(ShipVec(Cube(X, Y), Direction, Speed)) {}
     // Ship(int ID, int Rum, ShipVec Ship_vector) : id(ID), rum(Rum), vec(Ship_vector) {}
-    Ship(const Ship &s, Action Best_Action, float Fitness = 0.0) : id(s.id), rum(s.rum), mine_dropped(s.mine_dropped), fired_last(s.fired_last), vec(Best_Action.vec), best_action(Best_Action) {}
+    Ship(const Ship &s, Action Best_Action) : id(s.id), rum(s.rum), mine_dropped(s.mine_dropped), fired_last(s.fired_last), vec(Best_Action.vec), best_action(Best_Action) {}
+        // vec = best_action.opt == Option::NONE ? s.vec : best_action.vec;}
     
     ShipVec vec;
     int id = -1;
@@ -313,6 +316,8 @@ public:
             ret_val -= 10.0;
         ret_val += OnEdge(s.loc, s.dir);
         ret_val += OnMine(s, mines);
+        if (s.speed > 0)
+            ret_val += MineInFront(s, mines);
         ret_val += OnCannonball(s, cbs);
         ret_val += OnBarrel(s.loc, s.dir, barrels);
 
@@ -366,30 +371,51 @@ private:
         }
         else if (vec.speed == 1)
         {
-            ShipVec slower(new_loc, vec.dir, 0);
+
+            ShipVec slower_vec(new_loc, vec.dir, 0);
 
             InFront(new_loc, vec.dir);
-            ShipVec wait(new_loc, vec.dir, 1);
-            ShipVec starboard(new_loc, new_starboard_dir, 1);
-            ShipVec port(new_loc, new_port_dir, 1);
+            ShipVec wait_vec(new_loc, vec.dir, 1);
+            ShipVec starboard_vec(new_loc, new_starboard_dir, 1);
+            ShipVec port_vec(new_loc, new_port_dir, 1);
+            float mine_damage = MineInFront(vec, mines);
 
             InFront(new_loc, vec.dir);
-            ShipVec faster(new_loc, vec.dir, 2);
+            ShipVec faster_vec(new_loc, vec.dir, 2);
 
-            actions.emplace_back(wait, Option::WAIT, best_action);
-            actions.back().fitness += FitnessModification(wait, mines, cbs, barrels);
+            Action wait(wait_vec, Option::WAIT, best_action);
+            wait.fitness += FitnessModification(wait_vec, mines, cbs, barrels) + mine_damage;
+            if (id == 0 )
+                cerr << "ship: " << wait_vec.loc.Xo << "," << wait_vec.loc.Yo << "\tmine: " << MineInFront(wait_vec,mines) << endl;
+            actions.push_back(wait);
             push_heap(actions.begin(), actions.end());
-            actions.emplace_back(slower, Option::SLOWER, best_action);
-            actions.back().fitness += FitnessModification(slower, mines, cbs, barrels);
+
+            Action slower(slower_vec, Option::SLOWER, best_action);
+            slower.fitness += FitnessModification(slower_vec, mines, cbs, barrels);
+            if (id == 0 )
+                cerr << "ship: " << slower_vec.loc.Xo << "," << slower_vec.loc.Yo << "\tmine: " << MineInFront(slower_vec,mines) << endl;
+            actions.push_back(slower);
             push_heap(actions.begin(), actions.end());
-            actions.emplace_back(starboard, Option::STARBOARD, best_action);
-            actions.back().fitness += FitnessModification(starboard, mines, cbs, barrels);
+
+            Action starboard(starboard_vec, Option::STARBOARD, best_action);
+            starboard.fitness += FitnessModification(starboard_vec, mines, cbs, barrels) + mine_damage;
+            if (id == 0 )
+                cerr << "ship: " << starboard_vec.loc.Xo << "," << starboard_vec.loc.Yo << "\tmine: " << MineInFront(starboard_vec,mines) << endl;
+            actions.push_back(starboard);
             push_heap(actions.begin(), actions.end());
-            actions.emplace_back(port, Option::PORT, best_action);
-            actions.back().fitness += FitnessModification(port, mines, cbs, barrels);
+
+            Action port(port_vec, Option::PORT, best_action);
+            port.fitness += FitnessModification(port_vec, mines, cbs, barrels) + mine_damage;
+            if (id == 0 )
+                cerr << "ship: " << port_vec.loc.Xo << "," << port_vec.loc.Yo << "\tmine: " << MineInFront(port_vec,mines) << endl;
+            actions.push_back(port);
             push_heap(actions.begin(), actions.end());
-            actions.emplace_back(faster, Option::FASTER, best_action);
-            actions.back().fitness += FitnessModification(faster, mines, cbs, barrels);
+
+            Action faster(faster_vec, Option::FASTER, best_action);
+            faster.fitness += FitnessModification(faster_vec, mines, cbs, barrels) + mine_damage;
+            if (id == 0 )
+                cerr << "ship: " << faster_vec.loc.Xo << "," << faster_vec.loc.Yo << "\tmine: " << MineInFront(faster_vec,mines) << endl << endl;
+            actions.push_back(faster);
             push_heap(actions.begin(), actions.end());
             return 5;
         }
@@ -775,6 +801,14 @@ void BuildShotTemplate()
                     _shot_template.emplace_back(i, j, k);
 }
 
+void BuildTargetTemplate()
+{
+    for (int i = -3; i <= 3; ++i)
+        for (int j = -3; j <= 3; ++j)
+            for (int k = -3; k <= 3; ++k)
+                if (i + j + k == 0)
+                    _target_template.emplace_back(i, j, k);
+}
 
 
 
@@ -874,15 +908,30 @@ float OnMine(const ShipVec &s, const vector<Mine> &mines)
         else if (mines[i].loc == stern)
             ret_val -= 25.0; 
 
-        // Deal with mines in front
-        if (s.speed == 1)
-            InFront(bow, s.dir);
-        if (mines[i].loc == bow)
-            ret_val -= 25;
-        if (s.speed == 2)
-            InFront(bow, s.dir);
-        if (mines[i].loc == bow)
-            ret_val -= 25;
+    }
+    return ret_val;
+}
+
+float MineInFront(const ShipVec &s, const vector<Mine> &mines)
+{
+    float ret_val = 0.0;
+    Cube bow = s.loc;
+    InFront(bow, s.dir);
+    InFront(bow, s.dir);
+    // Deal with mines in front
+    if (s.speed == 1)
+    {        
+        for (unsigned int i = 0; i < mines.size(); ++i)
+            if (mines[i].loc == bow)
+                ret_val -= 25;
+    }    
+    else if (s.speed == 2)
+    {
+        Cube bow2 = bow;
+        InFront(bow2, s.dir);
+        for (unsigned int i = 0; i < mines.size(); ++i)
+            if (mines[i].loc == bow || mines[i].loc == bow2)
+                ret_val -= 25;
     }
     return ret_val;
 }
