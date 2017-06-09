@@ -147,7 +147,7 @@ public:
     Cube action_loc;
     Option opt = Option::NONE;
     vector<Action> prev_actions;
-    float fitness = 0.0;
+    float fitness = 0.0f;
 
 private:
     // Should never be more than 4 previous actions
@@ -219,7 +219,8 @@ public:
         make_heap(actions.begin(), actions.end(), VecSort);
 
         // cerr << "sim: " << sim_turn << "\tfired: " << fired_last << endl;
-        if (sim_turn - fired_last > 1)
+        // if (sim_turn - fired_last > 1)
+        if (false)
         {
             Cube bow = vec.loc;
             InFront(bow, vec.dir);
@@ -255,22 +256,22 @@ public:
 
             shots = viable_shots.size();
             Cube new_loc = vec.loc;
-            float expected_damage = 0.0;
+            float expected_damage = 0.0f;
             if (vec.speed == 0)
             {
-                expected_damage += FitnessModification(ShipVec(new_loc, vec.dir, vec.speed), mines, cbs, barrels);
+                expected_damage += FitnessModification(ShipVec(new_loc, vec.dir, vec.speed), mines, cbs, barrels, my_ships, en_ships, id);
             }
             else if (vec.speed == 1)
             {
                 InFront(new_loc, vec.dir);
-                expected_damage += FitnessModification(ShipVec(new_loc, vec.dir, vec.speed), mines, cbs, barrels);
+                expected_damage += FitnessModification(ShipVec(new_loc, vec.dir, vec.speed), mines, cbs, barrels, my_ships, en_ships, id);
             }
             else if (vec.speed == 2)
             {
                 // Does not properly account for mines at the moment...not entirely sure how I want to deal with it.
                 InFront(new_loc, vec.dir);                
                 InFront(new_loc, vec.dir);
-                expected_damage += FitnessModification(ShipVec(new_loc, vec.dir, vec.speed), mines, cbs, barrels);
+                expected_damage += FitnessModification(ShipVec(new_loc, vec.dir, vec.speed), mines, cbs, barrels, my_ships, en_ships, id);
 
             }
 
@@ -285,10 +286,10 @@ public:
         }
         if (sim_turn - mine_dropped > 4)
         {
-            PossibleMine(mines, cbs, barrels);
+            PossibleMine(mines, cbs, barrels, my_ships, en_ships);
             mine_actions = 1;
         }
-        int moves = PossibleMoves(mines, cbs, barrels);
+        int moves = PossibleMoves(mines, cbs, barrels, my_ships, en_ships);
         cutoff = GetRandomCutoffs(cutoffs, shots, mine_actions, moves);
         // cerr << "action size: " << actions.size() << endl;
     }
@@ -320,20 +321,22 @@ public:
             return actions[move + 4];
     }
 
-    float FitnessModification(const ShipVec &s, const vector<Mine> &mines, const vector<Cannonball> &cbs, const vector<Barrel> &barrels)
+    float FitnessModification(const ShipVec &s, const vector<Mine> &mines, const vector<Cannonball> &cbs, const vector<Barrel> &barrels, const vector<Ship> &my_ships, const vector<Ship> &en_ships, int id)
     {
         float ret_val = 0.0;
         // vector<int> impact_ids;
         // zero speed is very vulnerable
         if (s.speed == 0)
-            ret_val -= 10.0;
+            ret_val -= 14.0;
         ret_val += OnEdge(s.loc, s.dir);
         ret_val += OnMine(s, mines);
         if (s.speed > 0)
             ret_val += MineInFront(s, mines);
         ret_val += OnCannonball(s, cbs);
+        ret_val += OnShip(s.loc, s.dir, my_ships, en_ships, id);
         ret_val += OnBarrel(s.loc, s.dir, barrels);
-        ret_val += NextToMine(mines, cbs);
+        ret_val += NextToMine(s, mines, cbs);
+        ret_val += BarrelFitnessBoost(s, barrels);
 
 
         return ret_val;
@@ -346,12 +349,12 @@ private:
         Updates actions vector with the possible moves. Returns an integer
         representing the number of moves.
     */
-    int PossibleMoves(const vector<Mine> &mines, const vector<Cannonball> &cbs, const vector<Barrel> &barrels)
+    int PossibleMoves(const vector<Mine> &mines, const vector<Cannonball> &cbs, const vector<Barrel> &barrels, const vector<Ship> &my_ships, const vector<Ship> &en_ships)
     {
         Cube new_loc = vec.loc;
         int new_starboard_dir = vec.dir == 0 ? 5 : vec.dir - 1;
         int new_port_dir = vec.dir == 5 ? 0 : vec.dir + 1;
-
+        cerr << endl << "cb size: " << cbs.size() << "\t" << id << ":\n";
 
         if (vec.speed == 0)
         {
@@ -363,22 +366,26 @@ private:
             ShipVec faster_vec(new_loc, vec.dir, 1);
 
             Action wait(wait_vec, Option::WAIT, best_action);
-            wait.fitness += FitnessModification(wait_vec, mines, cbs, barrels);
+            wait.fitness += FitnessModification(wait_vec, mines, cbs, barrels, my_ships, en_ships, id);
+            cerr << "\tfitness: " << wait.fitness << endl;
             actions.push_back(wait);
             push_heap(actions.begin(), actions.end());
 
             Action starboard(starboard_vec, Option::STARBOARD, best_action);            
-            starboard.fitness += FitnessModification(starboard_vec, mines, cbs, barrels);
+            starboard.fitness += FitnessModification(starboard_vec, mines, cbs, barrels, my_ships, en_ships, id);
+            cerr << "\tfitness: " << starboard.fitness << endl;
             actions.push_back(starboard);
             push_heap(actions.begin(), actions.end());
 
             Action port(port_vec, Option::PORT, best_action);            
-            port.fitness += FitnessModification(port_vec, mines, cbs, barrels);
+            port.fitness += FitnessModification(port_vec, mines, cbs, barrels, my_ships, en_ships, id);
+            cerr << "\tfitness: " << port.fitness << endl;
             actions.push_back(port);
             push_heap(actions.begin(), actions.end());
 
             Action faster(faster_vec, Option::FASTER, best_action);            
-            faster.fitness += FitnessModification(faster_vec, mines, cbs, barrels);
+            faster.fitness += FitnessModification(faster_vec, mines, cbs, barrels, my_ships, en_ships, id);
+            cerr << "\tfitness: " << faster.fitness << endl;
             actions.push_back(faster);
             push_heap(actions.begin(), actions.end());
             return 4;
@@ -398,27 +405,32 @@ private:
             ShipVec faster_vec(new_loc, vec.dir, 2);
 
             Action wait(wait_vec, Option::WAIT, best_action);
-            wait.fitness += FitnessModification(wait_vec, mines, cbs, barrels);// + mine_damage;
+            wait.fitness += FitnessModification(wait_vec, mines, cbs, barrels, my_ships, en_ships, id);// + mine_damage;
+            cerr << "\tfitness: " << wait.fitness << endl;
             actions.push_back(wait);
             push_heap(actions.begin(), actions.end());
 
             Action slower(slower_vec, Option::SLOWER, best_action);
-            slower.fitness += FitnessModification(slower_vec, mines, cbs, barrels);
+            slower.fitness += FitnessModification(slower_vec, mines, cbs, barrels, my_ships, en_ships, id);
+            cerr << "\tfitness: " << slower.fitness << endl;
             actions.push_back(slower);
             push_heap(actions.begin(), actions.end());
 
             Action starboard(starboard_vec, Option::STARBOARD, best_action);
-            starboard.fitness += FitnessModification(starboard_vec, mines, cbs, barrels);// + mine_damage;
+            starboard.fitness += FitnessModification(starboard_vec, mines, cbs, barrels, my_ships, en_ships, id);// + mine_damage;
+            cerr << "\tfitness: " << starboard.fitness << endl;
             actions.push_back(starboard);
             push_heap(actions.begin(), actions.end());
 
             Action port(port_vec, Option::PORT, best_action);
-            port.fitness += FitnessModification(port_vec, mines, cbs, barrels);// + mine_damage;
+            port.fitness += FitnessModification(port_vec, mines, cbs, barrels, my_ships, en_ships, id);// + mine_damage;
+            cerr << "\tfitness: " << port.fitness << endl;
             actions.push_back(port);
             push_heap(actions.begin(), actions.end());
 
             Action faster(faster_vec, Option::FASTER, best_action);
-            faster.fitness += FitnessModification(faster_vec, mines, cbs, barrels);// + mine_damage;
+            faster.fitness += FitnessModification(faster_vec, mines, cbs, barrels, my_ships, en_ships, id);// + mine_damage;
+            cerr << "\tfitness: " << faster.fitness << endl;
             actions.push_back(faster);
             push_heap(actions.begin(), actions.end());
             return 5;
@@ -426,24 +438,31 @@ private:
         else
         {
             InFront(new_loc, vec.dir);
-            ShipVec slower(new_loc, vec.dir, 1);
+            ShipVec slower_vec(new_loc, vec.dir, 1);
 
             InFront(new_loc, vec.dir);
-            ShipVec wait(new_loc, vec.dir, 2);
-            ShipVec starboard(new_loc, new_starboard_dir, 2);
-            ShipVec port(new_loc, new_port_dir, 2);
+            ShipVec wait_vec(new_loc, vec.dir, 2);
+            ShipVec starboard_vec(new_loc, new_starboard_dir, 2);
+            ShipVec port_vec(new_loc, new_port_dir, 2);
 
-            actions.emplace_back(wait, Option::WAIT, best_action);
-            actions.back().fitness += FitnessModification(wait, mines, cbs, barrels);
+            Action wait(wait_vec, Option::WAIT, best_action);
+            wait.fitness += FitnessModification(wait_vec, mines, cbs, barrels, my_ships, en_ships, id);// + mine_damage;
+            actions.push_back(wait);
             push_heap(actions.begin(), actions.end());
-            actions.emplace_back(slower, Option::SLOWER, best_action);
-            actions.back().fitness += FitnessModification(slower, mines, cbs, barrels);
+
+            Action slower(slower_vec, Option::SLOWER, best_action);
+            slower.fitness += FitnessModification(slower_vec, mines, cbs, barrels, my_ships, en_ships, id);
+            actions.push_back(slower);
             push_heap(actions.begin(), actions.end());
-            actions.emplace_back(starboard, Option::STARBOARD, best_action);
-            actions.back().fitness += FitnessModification(starboard, mines, cbs, barrels);
+
+            Action starboard(starboard_vec, Option::STARBOARD, best_action);
+            starboard.fitness += FitnessModification(starboard_vec, mines, cbs, barrels, my_ships, en_ships, id);// + mine_damage;
+            actions.push_back(starboard);
             push_heap(actions.begin(), actions.end());
-            actions.emplace_back(port, Option::PORT, best_action);
-            actions.back().fitness += FitnessModification(port, mines, cbs, barrels);
+
+            Action port(port_vec, Option::PORT, best_action);
+            port.fitness += FitnessModification(port_vec, mines, cbs, barrels, my_ships, en_ships, id);// + mine_damage;
+            actions.push_back(port);
             push_heap(actions.begin(), actions.end());
             return 4;
         }
@@ -470,7 +489,7 @@ private:
         return ret_val;
     }
 
-    void PossibleMine(const vector<Mine> &mines, const vector<Cannonball> &cbs, const vector<Barrel> &barrels)
+    void PossibleMine(const vector<Mine> &mines, const vector<Cannonball> &cbs, const vector<Barrel> &barrels, const vector<Ship> &my_ships, const vector<Ship> &en_ships)
     {
         Cube mine_drop = vec.loc;       // ship center
         int drop_dir = (vec.dir + 3) % 6;
@@ -489,7 +508,7 @@ private:
         if (vec.speed > 1)
             InFront(new_loc, vec.dir);
         Action mine_action(ShipVec(new_loc, vec.dir, vec.speed), Option::MINE, best_action, mine_drop);
-        mine_action.fitness += FitnessModification(mine_action.vec, mines, cbs, barrels);
+        mine_action.fitness += FitnessModification(mine_action.vec, mines, cbs, barrels, my_ships, en_ships, id);
         actions.push_back(mine_action);
         push_heap(actions.begin(), actions.end());
     }
@@ -508,8 +527,8 @@ private:
     int GetRandomCutoffs(int* cutoffs, int shots_size, int mine, int moves)
     {
 
-        float total = shots_size == 0 ? 100.0 : shots_size / .55;
-        float mine_tot = mine * total * .05;
+        float total = shots_size == 0 ? 100.0f : shots_size / .55f;
+        float mine_tot = mine * total * .05f;
         float remainder = total - shots_size - mine_tot;
         float move_tot = remainder / moves;
         float running_total = shots_size;
@@ -529,13 +548,13 @@ private:
 
 
     // Returns all hexes adjacent to the bow and stern.
-    vector<Cube> TranslatePossibleMines()
+    vector<Cube> TranslatePossibleMines(const ShipVec &s)
     {
         vector<Cube> ret_val;
-        Cube bow = vec.loc;
-        InFront(bow, vec.dir);
-        Cube stern = vec.loc;
-        InFront(stern, (vec.dir + 3) % 6 );
+        Cube bow = s.loc;
+        InFront(bow, s.dir);
+        Cube stern = s.loc;
+        InFront(stern, (s.dir + 3) % 6 );
         
         // 7 = _shot_template.size()
         for (unsigned int i = 0; i < 7; ++i)
@@ -552,25 +571,85 @@ private:
 
     // Kind of heavy but checks each spot for a mine then checks if a shot is incoming. Incoming shots
     // have the potential to cause 10 damage to our boat so we should avoid them.
-    float NextToMine(const vector<Mine> &mines, const vector<Cannonball> &cbs)
+    float NextToMine(const ShipVec &s, const vector<Mine> &mines, const vector<Cannonball> &cbs)
     {
-        float ret_val = 0.0;
-        vector<Cube> spots = TranslatePossibleMines();
+        float ret_val = 0.0f;
+        vector<Cube> spots = TranslatePossibleMines(s);
         for (unsigned int i = 0; i < spots.size(); ++i)
             for (unsigned int j = 0; j < mines.size(); ++j)
                 if (spots[i] == mines[j].loc)
                     for (unsigned int k = 0; k < cbs.size(); ++k)
                         if (cbs[k].impact < 3 && cbs[k].loc == spots[i])
-                            ret_val += -10.0;
+                            ret_val += -10.0f;
         return ret_val;
     }
+
+
+    float BarrelFitnessBoost(const ShipVec &s, const vector<Barrel> &barrels)
+    {
+        float ret_val = 0.0f;
+        Cube bow = s.loc;
+        InFront(bow, s.dir);
+        for (unsigned int i = 0; i < barrels.size(); ++i)
+            ret_val += 50.0f / float(barrels[i].rum) / max(1.0f, ManhattanDist(bow, barrels[i].loc));
+
+        return ret_val;
+    }
+
+    float OnShip(const Cube &center, const int &dir, const vector<Ship> &my_ships, const vector<Ship> &en_ships, int id)
+    {
+        Cube stern = center;
+        InFront(stern,(dir + 3) % 6);
+        Cube bow = center;
+        InFront(bow, dir);
+
+        float ret_val = 0.0f;
+        for (unsigned int i = 0; i < my_ships.size(); ++i)
+        {
+            if (my_ships[i].id != id)
+            {
+                Cube en_center = my_ships[i].vec.loc;
+                Cube en_stern = en_center;
+                InFront(en_stern,(my_ships[i].vec.dir + 3) % 6);
+                Cube en_bow = en_center;
+                InFront(en_bow, dir);
+                // Assumes I'm not trying to box an enemy in
+                if (stern == en_stern || stern == en_center || stern == en_bow)
+                    ret_val -= 50.0f;
+                if (center == en_stern || center == en_center || center == en_bow)
+                    ret_val -= 50.0f;
+                if (bow == en_stern || bow == en_center || bow == en_bow)
+                    ret_val -= 50.0f;
+            }
+        }
+
+        for (unsigned int i = 0; i < en_ships.size(); ++i)
+        {
+            if (en_ships[i].vec.loc != center)
+            {
+                Cube en_center = en_ships[i].vec.loc;
+                Cube en_stern = en_center;
+                InFront(en_stern,(en_ships[i].vec.dir + 3) % 6);
+                Cube en_bow = en_center;
+                InFront(en_bow, dir);
+                // Assumes I'm not trying to ram
+                if (stern == en_stern || stern == en_center || stern == en_bow)
+                    ret_val -= 50.0f;
+                if (center == en_stern || center == en_center || center == en_bow)
+                    ret_val -= 50.0f;
+                if (bow == en_stern || bow == en_center || bow == en_bow)
+                    ret_val -= 50.0f;
+            }
+        }
+
+        return ret_val;
+    }
+
+
 
 };
 vector<Ship> _my_ships;
 vector<Ship> _en_ships;
-
-
-float OnShip(const Cube &center, const int &dir, const vector<Ship> &my_ships, const vector<Ship> &en_ships);
 
 
 class FitnessEvolution
@@ -612,7 +691,7 @@ public:
                 AdvanceCannonBalls(cbs_my_ship);
                 // Take top 10% of this ship's actions
                 // cerr << "ship action size: " << my_ships[j].actions.size() << endl;
-                for (unsigned int i = 0; i < my_ships[j].actions.size() * .1 + 1; ++i)
+                for (unsigned int i = 0; i < my_ships[j].actions.size(); ++i)// * .1 + 1; ++i)
                 {
                     Ship sim_ship(my_ships[j], my_ships[j].actions.front());
 
@@ -620,7 +699,7 @@ public:
                     sim_ship.FillActions(sim_turn + 1, my_ships, en_ships, mines, cbs_my_ship, barrels);
 
                     // Take only top 1% (+1) and add them to sim_ship_turn's actions
-                    for (unsigned int k = 0; k < sim_ship.actions.size() * .01 + 1; ++k)
+                    for (unsigned int k = 0; k < sim_ship.actions.size(); ++k)// * .01 + 1; ++k)
                     {
                         sim_ship_turn.push_back(sim_ship.actions.front());
                         push_heap(sim_ship_turn.begin(), sim_ship_turn.end());
@@ -756,17 +835,27 @@ int main()
             else if (entityType == "BARREL")
             {
                 for (unsigned int j = 0; j < _barrels.size(); ++j)
+                {
                     if (_barrels[j].id == entityId)
+                    {
+                        found = true;
                         barrels.push_back(_barrels[j]);
+                    }
+                }
 
                 if (!found)
-                    _barrels.emplace_back(x, y, arg1, entityId);
+                    barrels.emplace_back(x, y, arg1, entityId);
             }
             else if (entityType == "CANNONBALL")
             {
                 for (unsigned int j = 0; j < _cbs.size(); ++j)
+                {
                     if (_cbs[j].id == entityId)
+                    {
+                        found = true;
                         cbs.push_back(_cbs[j]);
+                    }
+                }
 
                 if (!found)
                 {
@@ -993,80 +1082,80 @@ float OnCannonball(const ShipVec &s, const vector<Cannonball> &cbs)
     InFront(stern,(s.dir + 3) % 6);
     Cube bow = s.loc;
     InFront(bow, s.dir);
-
-    float ret_val = 0.0;
+    cerr << bow.Xo << "," << bow.Yo << "\t" << s.loc.Xo << "," << s.loc.Yo << "\t" << stern.Xo << "," << stern.Yo << "\t";
+    float ret_val = 0.0f;
     for (unsigned int i = 0; i < cbs.size(); ++i)
     {
         if (s.speed == 0 && cbs[i].impact < 4)
         {
             if (cbs[i].loc == bow)
-                ret_val -= 25.0;
+                ret_val -= 25.0f;
             else if (cbs[i].loc == s.loc)
-                ret_val -= 50.0;
+                ret_val -= 50.0f;
             else if (cbs[i].loc == stern)
-                ret_val -= 25.0;
+                ret_val -= 25.0f;
         }
-        else if (s.speed > 0 && cbs[i].impact == 1)
+        else if (s.speed > 0 && cbs[i].impact < 2)
         {
             if (cbs[i].loc == bow)
-                ret_val -= 25.0;
+                ret_val -= 25.0f;
             else if (cbs[i].loc == s.loc)
-                ret_val -= 50.0;
+                ret_val -= 50.0f;
             else if (cbs[i].loc == stern)
-                ret_val -= 25.0;
+                ret_val -= 25.0f;
         }
     }
     return ret_val;
 }
 
-float OnShip(const Cube &center, const int &dir, const vector<Ship> &my_ships, const vector<Ship> &en_ships)
-{
-    Cube stern = center;
-    InFront(stern,(dir + 3) % 6);
-    Cube bow = center;
-    InFront(bow, dir);
+// float OnShip(const Cube &center, const int &dir, const vector<Ship> &my_ships, const vector<Ship> &en_ships)
+// {
+//     Cube stern = center;
+//     InFront(stern,(dir + 3) % 6);
+//     Cube bow = center;
+//     InFront(bow, dir);
 
-    float ret_val = 0.0;
-    for (unsigned int i = 0; i < my_ships.size(); ++i)
-    {
-        if (my_ships[i].vec.loc != center)
-        {
-            Cube en_center = my_ships[i].vec.loc;
-            Cube en_stern = en_center;
-            InFront(en_stern,(my_ships[i].vec.dir + 3) % 6);
-            Cube en_bow = en_center;
-            InFront(en_bow, dir);
-            // Assumes I'm not trying to box an enemy in
-            if (stern == en_stern || stern == en_center || stern == en_bow)
-                ret_val -= 50.0;
-            if (center == en_stern || center == en_center || center == en_bow)
-                ret_val -= 50.0;
-            if (bow == en_stern || bow == en_center || bow == en_bow)
-                ret_val -= 50.0;
-        }
-    }
+//     float ret_val = 0.0;
+//     for (unsigned int i = 0; i < my_ships.size(); ++i)
+//     {
+//         if (my_ships[i].vec.loc != center)
+//         {
+//             Cube en_center = my_ships[i].vec.loc;
+//             Cube en_stern = en_center;
+//             InFront(en_stern,(my_ships[i].vec.dir + 3) % 6);
+//             Cube en_bow = en_center;
+//             InFront(en_bow, dir);
+//             // Assumes I'm not trying to box an enemy in
+//             if (stern == en_stern || stern == en_center || stern == en_bow)
+//                 ret_val -= 50.0;
+//             if (center == en_stern || center == en_center || center == en_bow)
+//                 ret_val -= 50.0;
+//             if (bow == en_stern || bow == en_center || bow == en_bow)
+//                 ret_val -= 50.0;
+//         }
+//     }
 
-    for (unsigned int i = 0; i < en_ships.size(); ++i)
-    {
-        if (en_ships[i].vec.loc != center)
-        {
-            Cube en_center = en_ships[i].vec.loc;
-            Cube en_stern = en_center;
-            InFront(en_stern,(en_ships[i].vec.dir + 3) % 6);
-            Cube en_bow = en_center;
-            InFront(en_bow, dir);
-            // Assumes I'm not trying to ram
-            if (stern == en_stern || stern == en_center || stern == en_bow)
-                ret_val -= 50.0;
-            if (center == en_stern || center == en_center || center == en_bow)
-                ret_val -= 50.0;
-            if (bow == en_stern || bow == en_center || bow == en_bow)
-                ret_val -= 50.0;
-        }
-    }
+//     for (unsigned int i = 0; i < en_ships.size(); ++i)
+//     {
+//         if (en_ships[i].vec.loc != center)
+//         {
+//             Cube en_center = en_ships[i].vec.loc;
+//             Cube en_stern = en_center;
+//             InFront(en_stern,(en_ships[i].vec.dir + 3) % 6);
+//             Cube en_bow = en_center;
+//             InFront(en_bow, dir);
+//             // Assumes I'm not trying to ram
+//             if (stern == en_stern || stern == en_center || stern == en_bow)
+//                 ret_val -= 50.0;
+//             if (center == en_stern || center == en_center || center == en_bow)
+//                 ret_val -= 50.0;
+//             if (bow == en_stern || bow == en_center || bow == en_bow)
+//                 ret_val -= 50.0;
+//         }
+//     }
 
-    return ret_val;
-}
+//     return ret_val;
+// }
 
 // I consider edges to be relatively unsafe since it limits your movement options
 // Collisions with the edge put you at a stop and could incur a 50 rum hit
@@ -1091,7 +1180,6 @@ float ManhattanDist(const Cube &origin, const Cube &dest)
 {
     return (abs(origin.x-dest.x) + abs(origin.y-dest.y) + abs(origin.z-dest.z)) / 2.0;
 }
-
 
 
 
